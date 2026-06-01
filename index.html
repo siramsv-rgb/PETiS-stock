@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>PETiS Stock v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0f1117;--sur:#1a1d27;--sur2:#22263a;--bdr:#2e3350;--acc:#4f8ef7;--grn:#2ecc8a;--yel:#f7c948;--red:#f7554f;--txt:#e8eaf6;--mut:#6b7099;--font:'Sarabun',sans-serif;--mono:'IBM Plex Mono',monospace}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--txt);font-family:var(--font);min-height:100vh;overflow-x:hidden}
+.sync-banner{display:flex;align-items:center;justify-content:center;gap:8px;padding:5px 16px;font-size:12px;font-weight:500}
+.sync-banner.connecting{background:var(--sur);color:var(--mut)}
+.sync-banner.live{background:rgba(46,204,138,.12);color:var(--grn)}
+.sync-banner.error{background:rgba(247,85,79,.12);color:var(--red)}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+.sync-banner.live .sync-dot{animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.topbar{position:sticky;top:0;z-index:100;background:var(--bg);border-bottom:1px solid var(--bdr);padding:12px 14px 8px}
+.topbar-row1{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.logo{font-size:17px;font-weight:700;letter-spacing:1px;color:var(--acc)}
+.logo span{color:var(--mut);font-weight:300}
+.date-badge{font-family:var(--mono);font-size:11px;color:var(--mut);background:var(--sur2);padding:3px 8px;border-radius:6px}
+.search-wrap{position:relative}
+.search-wrap input{width:100%;background:var(--sur);border:1px solid var(--bdr);border-radius:10px;padding:9px 14px 9px 36px;color:var(--txt);font-family:var(--font);font-size:15px;outline:none}
+.search-wrap input::placeholder{color:var(--mut)}
+.search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--mut);font-size:15px;pointer-events:none}
+.tabs{display:flex;overflow-x:auto;gap:5px;padding:8px 14px;background:var(--bg);border-bottom:1px solid var(--bdr);scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex-shrink:0;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;background:var(--sur);color:var(--mut);white-space:nowrap}
+.tab.active{background:var(--acc);color:#fff}
+.subtabs{display:flex;overflow-x:auto;gap:5px;padding:6px 14px;background:var(--bg);border-bottom:1px solid var(--bdr);scrollbar-width:none;display:none}
+.subtabs.show{display:flex}
+.subtabs::-webkit-scrollbar{display:none}
+.subtab{flex-shrink:0;padding:4px 10px;border-radius:20px;font-size:11px;cursor:pointer;background:var(--sur2);color:var(--mut);white-space:nowrap}
+.subtab.active{background:var(--acc2,#7c6af7);color:#fff}
+.content{padding:10px 12px 100px}
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin:14px 0 6px}
+.section-title{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--mut)}
+.section-count{font-family:var(--mono);font-size:10px;color:var(--mut);background:var(--sur2);padding:2px 7px;border-radius:10px}
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:12px;margin-bottom:7px;overflow:hidden;transition:border-color .2s}
+.card.expanded{border-color:var(--acc)}
+.card-hdr{display:flex;align-items:center;gap:9px;padding:11px 12px;cursor:pointer}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.dot.ok{background:var(--grn);box-shadow:0 0 5px var(--grn)}
+.dot.low{background:var(--yel);box-shadow:0 0 5px var(--yel)}
+.dot.out{background:var(--red);box-shadow:0 0 5px var(--red);animation:pulse 1.5s infinite}
+.dot.expired{background:var(--mut)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.card-info{flex:1;min-width:0}
+.drug-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.drug-meta{font-family:var(--mono);font-size:10px;color:var(--mut);margin-top:2px}
+.saved-info{font-size:10px;color:var(--mut);margin-top:2px}
+.last-check{font-size:10px;margin-top:2px}
+.last-check.checked{color:#5ba0f7}
+.last-check.never{color:var(--mut);font-style:italic}
+.qty-badge{font-family:var(--mono);font-size:12px;font-weight:500;padding:3px 9px;border-radius:7px;flex-shrink:0}
+.qty-badge.ok{background:rgba(46,204,138,.15);color:var(--grn)}
+.qty-badge.low{background:rgba(247,201,72,.15);color:var(--yel)}
+.qty-badge.out{background:rgba(247,85,79,.15);color:var(--red)}
+.qty-badge.expired{background:rgba(107,112,153,.15);color:var(--mut)}
+.edit-panel{display:none;padding:0 12px 12px;border-top:1px solid var(--bdr)}
+.card.expanded .edit-panel{display:block}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.form-group{display:flex;flex-direction:column;gap:3px}
+.form-group.full{grid-column:1/-1}
+label{font-size:11px;color:var(--mut);font-weight:500}
+input[type="number"],input[type="date"],select,textarea{background:var(--sur2);border:1px solid var(--bdr);border-radius:7px;padding:8px 10px;color:var(--txt);font-family:var(--font);font-size:13px;outline:none;width:100%;-webkit-appearance:none}
+input:focus,select:focus,textarea:focus{border-color:var(--acc)}
+select option{background:var(--sur2)}
+textarea{resize:none;height:54px;font-size:12px}
+.btn-save{margin-top:10px;width:100%;padding:10px;background:var(--acc);border:none;border-radius:9px;color:#fff;font-family:var(--font);font-size:14px;font-weight:600;cursor:pointer}
+.btn-save.saving{background:var(--mut)}
+.btn-save.saved{background:var(--grn)}
+.bottom-bar{position:fixed;bottom:0;left:0;right:0;background:var(--sur);border-top:1px solid var(--bdr);padding:10px 14px;display:flex;gap:7px;z-index:100}
+.chip{flex:1;text-align:center;padding:7px 3px;background:var(--sur2);border-radius:9px}
+.chip .num{font-family:var(--mono);font-size:17px;font-weight:500}
+.chip .lbl{font-size:9px;color:var(--mut);margin-top:1px}
+.chip.out .num{color:var(--red)}.chip.low .num{color:var(--yel)}.chip.ok .num{color:var(--grn)}.chip.exp .num{color:var(--mut)}
+.checker-bar{display:flex;gap:7px;align-items:center;margin:8px 0 3px}
+.checker-bar select{flex:1;font-size:12px;padding:7px 9px}
+.checker-label{font-size:11px;color:var(--mut);flex-shrink:0}
+.empty{text-align:center;padding:40px 20px;color:var(--mut);font-size:13px}
+.loading-overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:14px}
+.loading-overlay.hidden{display:none}
+.spinner{width:32px;height:32px;border:3px solid var(--bdr);border-top-color:var(--acc);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:13px;color:var(--mut)}
+</style>
+</head>
+<body>
+<div class="loading-overlay" id="loadingOverlay"><div class="spinner"></div><div class="loading-text">กำลังเชื่อมต่อ Firebase...</div></div>
+<div class="sync-banner connecting" id="syncBanner"><div class="sync-dot"></div><span id="syncText">กำลังเชื่อมต่อ...</span></div>
+<div class="topbar">
+  <div class="topbar-row1"><div class="logo">PETiS <span>Stock</span></div><div class="date-badge" id="dateBadge"></div></div>
+  <div class="search-wrap"><span class="search-icon">🔍</span><input type="text" id="searchInput" placeholder="ค้นหาชื่อ รหัส บริษัท..."></div>
+</div>
+<div class="tabs" id="tabsBar"></div>
+<div class="subtabs" id="subtabsBar"></div>
+<div class="content" id="mainContent"><div class="empty">กำลังโหลด...</div></div>
+<div class="bottom-bar">
+  <div class="chip out"><div class="num" id="cntOut">–</div><div class="lbl">หมด/สั่ง</div></div>
+  <div class="chip low"><div class="num" id="cntLow">–</div><div class="lbl">ใกล้หมด</div></div>
+  <div class="chip ok"><div class="num" id="cntOk">–</div><div class="lbl">ปกติ</div></div>
+  <div class="chip exp"><div class="num" id="cntExp">–</div><div class="lbl">หมดอายุ</div></div>
+</div>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import{getDatabase,ref,onValue,update}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+const app=initializeApp({apiKey:"AIzaSyALZsyNgNy9T7ylHt6QYDfi504rGwIzW_E",authDomain:"petis-stock.firebaseapp.com",databaseURL:"https://petis-stock-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"petis-stock",storageBucket:"petis-stock.firebasestorage.app",messagingSenderId:"207593392298",appId:"1:207593392298:web:56aa64ac90db71977468d3"});
+const db=getDatabase(app);
+const stockRef=ref(db,"stock");
+const DRUGS=[
+{id:"T-0045",name:"Svoz (Moxifloxacin)",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"Siam",unit:"bottle",qty:10,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"",name:"Momesone (mometasone)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"bottle",qty:0,owner:"EARN",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0307",name:"Spazol / Itraconazole",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:3,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0010",name:"Metrolex 200mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:9,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0090",name:"Metrolex 400mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:6,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"",name:"Melox 15mg (meloxicam)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:1,owner:"EARN",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0497",name:"Sifilex",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:19,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0099a",name:"Onsia / Ondansetron 8mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:11,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0500",name:"Betahistine mesilate 6mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:0,owner:"EARN",status:"expired",sheet:"Medicine",expiry:""},
+{id:"M-0273",name:"Diltiazem HCl 30mg (Ditizem)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:3,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0439",name:"Amlodipine (Deten) 5mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:3,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0482",name:"Pitomate 25mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:16,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0481",name:"Pitomate 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:20,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0252",name:"Neuviplex B1,B2,B6,B12",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0208",name:"Mazt 5mg (Gasmotin)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:6,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0129",name:"Ulcefate 60ml",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"bottle",qty:24,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0161",name:"Ulcefate 240ml",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"bottle",qty:18,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0181",name:"Ulcefate 500mg tablets",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:1,owner:"EARN",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0272",name:"Gabapentin 100mg (Gabutin)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0248",name:"Gabapentin 600mg (Gabutin)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:6,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0243",name:"Sixime 100mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:12,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0002",name:"Furetic 40mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:8,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0404",name:"Fluconazole 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:2,owner:"EARN",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0142",name:"Pebalin 25mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:50,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0424",name:"Pebalin 75mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:30,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0148",name:"Pabalin 150mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:26,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0479",name:"Setin (Cetirizine HCl 1mg)",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Siam",unit:"bottle",qty:10,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0450",name:"Azith 200mg syrup",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"bottle",qty:20,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0099b",name:"Ondansetron 8mg tablets",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:1,owner:"EARN",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0324",name:"Prazosin HCl 1mg (Lopress)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"bottle",qty:15,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0005",name:"Rosil 150mg (Clindamycin)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:1,owner:"EARN",status:"low",sheet:"Medicine",expiry:""},
+{id:"\u0e44\u0e21\u0e48\u0e21\u0e35\u0e42\u0e04\u0e49\u0e14-1",name:"Sodez 4mg (silodosin)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:1,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0507",name:"Vebroz (Rivaroxaban 10mg)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Siam",unit:"boxes",qty:10,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0083",name:"Marbocyl 20mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Amcovet",unit:"boxes",qty:20,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0084",name:"Marbocyl 80mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Amcovet",unit:"boxes",qty:15,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0427",name:"Nutar (Calm)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Amcovet",unit:"boxes",qty:19,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0428",name:"Nutar (Mind)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Amcovet",unit:"boxes",qty:3,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0026",name:"Aurizon",sub:"\u0e22\u0e32\u0e2b\u0e39",company:"Amcovet",unit:"bottle",qty:7,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0297",name:"Ipakitine 60g",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Amcovet",unit:"bottle",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0016",name:"Kary uni",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e14\u0e35\u0e17\u0e41\u0e2e\u0e25\u0e4c\u0e21",unit:"boxes",qty:6,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0037",name:"Cravit 0.5%",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e14\u0e35\u0e17\u0e41\u0e2e\u0e25\u0e4c\u0e21",unit:"bottle",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0047",name:"Cravit 1.5%",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e14\u0e35\u0e17\u0e41\u0e2e\u0e25\u0e4c\u0e21",unit:"bottle",qty:80,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0040",name:"Trusopt 2%",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e14\u0e35\u0e17\u0e41\u0e2e\u0e25\u0e4c\u0e21",unit:"bottle",qty:10,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0038",name:"Hialid 0.3%",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e14\u0e35\u0e17\u0e41\u0e2e\u0e25\u0e4c\u0e21",unit:"bottle",qty:90,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0044",name:"Pemirox 0.1%",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e14\u0e35\u0e17\u0e41\u0e2e\u0e25\u0e4c\u0e21",unit:"boxes",qty:6,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0002",name:"Intrasite Gel",sub:"\u0e22\u0e32\u0e43\u0e2a\u0e48\u0e41\u0e1c\u0e25",company:"\u0e14\u0e35\u0e17\u0e41\u0e2e\u0e25\u0e4c\u0e21",unit:"boxes",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0106",name:"Vetmedin 5mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Boehringer",unit:"boxes",qty:28,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0309",name:"Semintra",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Boehringer",unit:"bottle",qty:20,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0408",name:"Metacam",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Boehringer",unit:"bottle",qty:26,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0312",name:"Micardis",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Boehringer",unit:"boxes",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0019",name:"Pexion 100mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Boehringer",unit:"bottle",qty:0,owner:"EARN",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0076",name:"Pexion 400mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Boehringer",unit:"bottle",qty:9,owner:"EARN",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0152",name:"FortiFlora Dog",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Purina",unit:"boxes",qty:20,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0151",name:"FortiFlora Cat",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Purina",unit:"boxes",qty:24,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0069",name:"Tebonin 120mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Zuellig",unit:"boxes",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0080",name:"Keppra 250mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Zuellig",unit:"boxes",qty:14,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0030",name:"Keppra syrup",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Zuellig",unit:"bottle",qty:1,owner:"EARN",status:"low",sheet:"Medicine",expiry:""},
+{id:"T-0015",name:"Terramycin",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"Zuellig",unit:"tube",qty:20,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0021",name:"Tobradex drop",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"Zuellig",unit:"bottle",qty:24,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0072",name:"Nitroderm",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Zuellig",unit:"boxes",qty:20,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0480",name:"Entresto 100mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Novartis",unit:"tablets",qty:19,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0127",name:"Ureaten cream 10%",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"\u0e08\u0e23\u0e39\u0e0d\u0e40\u0e20\u0e2a\u0e31\u0e0a",unit:"tube",qty:14,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0047",name:"Bacidal 15g",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"\u0e08\u0e23\u0e39\u0e0d\u0e40\u0e20\u0e2a\u0e31\u0e0a",unit:"tube",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0143",name:"Delacor",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"\u0e08\u0e23\u0e39\u0e0d\u0e40\u0e20\u0e2a\u0e31\u0e0a",unit:"tube",qty:18,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0344a",name:"Metadoxil 500mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Enrodrug",unit:"boxes",qty:3,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0186",name:"Puroxam 400mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Enrodrug",unit:"boxes",qty:16,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0057",name:"Puroxam syrup",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Enrodrug",unit:"bottle",qty:50,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0217",name:"Fluifort syrup",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Enrodrug",unit:"bottle",qty:60,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0226",name:"Eurofer-Iron syrup",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Enrodrug",unit:"bottle",qty:10,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"N-0150",name:"Somazana Solution 30ml",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Enrodrug",unit:"bottle",qty:6,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0247",name:"Yunnan",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e17\u0e19\u0e48\u0e32 \u0e2d\u0e34\u0e21\u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"packs",qty:13,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0240",name:"Dehecta",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"MacroPhar",unit:"boxes",qty:18,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0453",name:"Cholemax (ursolin syrup)",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"MacroPhar",unit:"bottle",qty:0,owner:"EARN",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0483",name:"Doxin",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Asian",unit:"boxes",qty:8,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0133",name:"Phenotal elixir syrup",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Asian",unit:"bottle",qty:22,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0118",name:"Rowatinex",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1a\u0e2a\u0e17\u0e4c\u0e2d\u0e35\u0e04\u0e27\u0e34\u0e1b\u0e40\u0e21\u0e49\u0e19\u0e17\u0e4c",unit:"boxes",qty:22,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0202",name:"Rowachol",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1a\u0e2a\u0e17\u0e4c\u0e2d\u0e35\u0e04\u0e27\u0e34\u0e1b\u0e40\u0e21\u0e49\u0e19\u0e17\u0e4c",unit:"boxes",qty:26,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0451",name:"Cortavance spray",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Virbac",unit:"bottle",qty:8,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0220",name:"C.E.T Beef (\u0e22\u0e32\u0e2a\u0e35\u0e1f\u0e31\u0e19)",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Virbac",unit:"tube",qty:12,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"E-0113",name:"\u0e41\u0e1b\u0e23\u0e07\u0e2a\u0e35\u0e1f\u0e31\u0e19",sub:"\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"\u0e01\u0e39\u0e4a\u0e14\u0e44\u0e25\u0e19\u0e4c",unit:"\u0e2d\u0e31\u0e19",qty:10,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"N-0108",name:"Veggiedent S",sub:"\u0e02\u0e19\u0e21",company:"\u0e01\u0e39\u0e4a\u0e14\u0e44\u0e25\u0e19\u0e4c",unit:"\u0e16\u0e38\u0e07",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"N-0103",name:"Veggiedent XS",sub:"\u0e02\u0e19\u0e21",company:"\u0e01\u0e39\u0e4a\u0e14\u0e44\u0e25\u0e19\u0e4c",unit:"\u0e16\u0e38\u0e07",qty:8,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0032a",name:"Cephalexin 300mg (Rilexin)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e01\u0e39\u0e4a\u0e14\u0e44\u0e25\u0e19\u0e4c",unit:"boxes",qty:1,owner:"EARN",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0031",name:"Cephalexin 600mg (Rilexin)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e01\u0e39\u0e4a\u0e14\u0e44\u0e25\u0e19\u0e4c",unit:"boxes",qty:1,owner:"EARN",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0032b",name:"Cephalexin 75mg (Rilexin)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e01\u0e39\u0e4a\u0e14\u0e44\u0e25\u0e19\u0e4c",unit:"boxes",qty:2,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0329",name:"Panacur",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"MSD",unit:"boxes",qty:24,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0310",name:"Leventa Oral for Dog",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"MSD",unit:"bottle",qty:5,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0007",name:"Optimmune (\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32)",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"MSD",unit:"tube",qty:26,owner:"EARN",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0039",name:"Mucocin 8mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"MEDIC PHARMO",unit:"boxes",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0112",name:"Prednisolone 5mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"MEDIC PHARMO",unit:"bottle",qty:4,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0216",name:"Prednisolone syrup 60ml",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"MEDIC PHARMO",unit:"bottle",qty:22,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0034",name:"Chlorphenirmine 4mg CPM",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"MEDIC PHARMO",unit:"bottle",qty:1,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"D-0010",name:"Lamisil",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"DKSH",unit:"tube",qty:14,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0003",name:"C-20 (\u0e25\u0e49\u0e32\u0e07\u0e1b\u0e32\u0e01)",sub:"\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"DKSH",unit:"bottle",qty:48,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0004",name:"Bisolvon",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"boxes",qty:18,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0147",name:"Tep Plus Skin Spray",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"DKSH",unit:"bottle",qty:50,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0138",name:"Resolor",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"boxes",qty:12,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0040",name:"Plavix Clopidogrel 75mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"boxes",qty:14,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0254",name:"Nitrofurantoin 100mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"\u0e02\u0e27\u0e14",qty:1,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0280",name:"Zonisamide 100mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"boxes",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0323",name:"Circadin 2mg (Melatonin)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"boxes",qty:7,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0350",name:"Famvir 250mg (Famciclovir)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"boxes",qty:4,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0378",name:"Cellcept 250mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"boxes",qty:1,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0423",name:"Tapazole 5mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"bottle",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0004",name:"Alcon Atropine 1%",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"DKSH",unit:"bottle",qty:3,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0042",name:"Acular",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"DKSH",unit:"bottle",qty:10,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0142",name:"Vidisic Gel 10mg",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"DKSH",unit:"tube",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0301",name:"Methycobol 500ug",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"bottle",qty:5,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0489",name:"Xarelto 10mg (Rivaroxaban)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"boxes",qty:0,owner:"TOEY",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0313",name:"Xarelto 20mg (Rivaroxaban)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"DKSH",unit:"boxes",qty:0,owner:"TOEY",status:"out",sheet:"Medicine",expiry:""},
+{id:"D-0148",name:"Labocyn Oral care spray",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"bottle",qty:20,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0151",name:"Labocyn Skin care spray",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"bottle",qty:0,owner:"TOEY",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0351",name:"Hepato sup.",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"bottle",qty:12,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0028",name:"Nex Gard 1.35-3.5kg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"boxes",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0029",name:"Nex Gard 3.5-7.5kg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"boxes",qty:4,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"D-0030",name:"Nex Gard 7.5-15kg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"boxes",qty:7,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0031",name:"Nex Gard 15-30kg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"boxes",qty:14,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0032",name:"Nex Gard 30-60kg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"boxes",qty:0,owner:"TOEY",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0021",name:"Previcox 57mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"bottle",qty:2,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0024",name:"Previcox 227mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"bottle",qty:1,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"N-0126",name:"Fresh Breath cat (original)",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"\u0e40\u0e1e\u0e47\u0e04 \u0e40\u0e2d\u0e47\u0e01\u0e0b\u0e4c",unit:"bottle",qty:4,owner:"TOEY",status:"expired",sheet:"Medicine",expiry:""},
+{id:"M-0368",name:"Florinfef (\u0e15\u0e39\u0e49\u0e40\u0e22\u0e47\u0e19)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"J.S vision",unit:"bottle",qty:10,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0097",name:"MIRACID Omeprazole 20mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Berlin",unit:"tablets",qty:15,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0146",name:"Ursolin 250mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Berlin",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:54,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0079",name:"Hepalac syrup",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Berlin",unit:"bottle",qty:20,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0361",name:"Bestazol 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Berlin",unit:"boxes",qty:9,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0131",name:"Hyles 25mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Berlin",unit:"boxes",qty:2,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0426",name:"Manoboxine tablets",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"GPO",unit:"bottle",qty:5,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0337",name:"Sildenafil 20mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"GPO",unit:"boxes",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0203",name:"Sidegra 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"GPO",unit:"boxes",qty:150,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0346",name:"Phenobarbitone 30mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"GPO",unit:"bottle",qty:2,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0238",name:"Phenobarbitone 60mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"GPO",unit:"bottle",qty:1,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0194",name:"Amitriptyline 10mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"GPO",unit:"boxes",qty:1,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0485",name:"Manotap Cyproheptadine 4mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"GPO",unit:"boxes",qty:2,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0266",name:"Bromav 200mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Mavlab",unit:"bottle",qty:4,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0484",name:"Azodyl",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Vetoquinol",unit:"bottle",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0012",name:"Clavaseptin 500mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Vetoquinol",unit:"boxes",qty:9,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0011",name:"Clavaseptin 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Vetoquinol",unit:"boxes",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0268",name:"Clavaseptin 250mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Vetoquinol",unit:"boxes",qty:20,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0302",name:"Propalin syrup 40mg",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Vetoquinol",unit:"bottle",qty:1,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0138a",name:"Tolfedine 6mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Vetoquinol",unit:"boxes",qty:2,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0139",name:"Tolfedine 60mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Vetoquinol",unit:"boxes",qty:1,owner:"TOEY",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0016",name:"Tensurin 20mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Vetoquinol",unit:"boxes",qty:12,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0253",name:"Zyrtec 10mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"GSK",unit:"boxes",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0075",name:"Ventolin Evohaler",sub:"\u0e22\u0e32\u0e14\u0e21",company:"GSK",unit:"bottle",qty:4,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0098",name:"Seretide Evohaler",sub:"\u0e22\u0e32\u0e14\u0e21",company:"GSK",unit:"bottle",qty:3,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0400",name:"Muflex",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"T.O",unit:"boxes",qty:8,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0061",name:"Ulfamet 20mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"T.O",unit:"bottle",qty:2,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0138b",name:"Simethicone 80mg (simcone-T)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"T.O",unit:"",qty:0,owner:"TOEY",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0184",name:"Simcomine syrup 10mg/ml",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"T.O",unit:"bottle",qty:22,owner:"TOEY",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0425",name:"Viyo",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Bestagro",unit:"bottle",qty:36,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0136",name:"Triz EDTA 16oz",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Bestagro",unit:"bottle",qty:14,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0150",name:"CerumAural",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Bestagro",unit:"bottle",qty:3,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0116",name:"DermAllay oatmeal shampoo 355ml",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Bestagro",unit:"bottle",qty:87,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0160",name:"MalAcetic wet wipes for dog",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Bestagro",unit:"",qty:0,owner:"OIL",status:"out",sheet:"Medicine",expiry:""},
+{id:"D-0100",name:"Aloveen conditioner",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Bestagro",unit:"tube",qty:3,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0416",name:"Vetoryl 10mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Bestagro",unit:"boxes",qty:18,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0143",name:"Vetoryl 30mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Bestagro",unit:"boxes",qty:29,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0144",name:"Vetoryl 60mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Bestagro",unit:"boxes",qty:20,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0060",name:"Osurnia",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e2b\u0e39",company:"Bestagro",unit:"tube",qty:20,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0082",name:"Oridermyl 10mg",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e2b\u0e39",company:"Bestagro",unit:"tube",qty:1,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0231",name:"Taurine 250mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Bestagro",unit:"bottle",qty:1,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0446",name:"Ferli-6 iron",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Continetal Pharm",unit:"bowl",qty:4,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0245",name:"LPS",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"bottle",qty:35,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0201",name:"Pinfenon-S",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"bottle",qty:20,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0137",name:"Taheebo",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"bottle",qty:38,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0442",name:"Mimitoll-S",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"bottle",qty:14,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0071",name:"Synoquin S",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:5,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0072",name:"Synoquin L",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:8,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0126",name:"Samylin S",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:20,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0172",name:"Samylin M",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:18,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0362",name:"Aktivat Cat",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:12,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0093",name:"Aktivat Dog S",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:12,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0094",name:"Aktivat Dog M",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:10,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0101",name:"Lypex",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:10,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0260",name:"Fibor",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"bowl",qty:9,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0303",name:"Coatex",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:8,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0296",name:"Cystaid Cat",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:4,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0504",name:"Cystaid Dog",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"bottle",qty:5,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0498",name:"Calmex tablets",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:8,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0499",name:"Calmex syrup",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"bottle",qty:8,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0147",name:"Urinaid",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:3,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0165",name:"Cobalin",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"bottle",qty:1,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0445",name:"Colaid",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"bottle",qty:2,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0315",name:"Tricho-S",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"TJ.",unit:"boxes",qty:4,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0435",name:"Bio-Marine",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Pharma Nord",unit:"\u0e25\u0e31\u0e07",qty:2,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0371",name:"Bio-Q10 30mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Pharma Nord",unit:"boxes",qty:0,owner:"OIL",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0370",name:"Bio-Q10 100mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Pharma Nord",unit:"boxes",qty:15,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0412",name:"Bio-Selenium+Zinc",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Pharma Nord",unit:"boxes",qty:8,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"N-0142",name:"Bio-Carnitine",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Pharma Nord",unit:"boxes",qty:25,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0179",name:"Bio-Curcumin",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Pharma Nord",unit:"boxes",qty:32,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0437",name:"Bio-Vit C",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Pharma Nord",unit:"boxes",qty:0,owner:"OIL",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0374",name:"Bio-E Vitamin",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Pharma Nord",unit:"boxes",qty:0,owner:"OIL",status:"out",sheet:"Medicine",expiry:""},
+{id:"D-0049",name:"Revolution Plus Cat 1.25-2.5kg (\u0e40\u0e2b\u0e25\u0e37\u0e2d\u0e07)",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Zoetis",unit:"boxes",qty:5,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0046",name:"Revolution Plus Cat 2.6-5.0kg (\u0e2a\u0e49\u0e21)",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Zoetis",unit:"boxes",qty:3,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0053",name:"Revolution Plus Dog 2.6-5.0kg (\u0e21\u0e48\u0e27\u0e07)",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Zoetis",unit:"boxes",qty:10,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0048",name:"Revolution Plus Cat 5.1-10kg (\u0e40\u0e02\u0e35\u0e22\u0e27)",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Zoetis",unit:"boxes",qty:4,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0050a",name:"Revolution Dog 10.1-20kg (\u0e19\u0e49\u0e33\u0e15\u0e32\u0e25)",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Zoetis",unit:"boxes",qty:10,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0052",name:"Revolution Dog 20.1-40kg (\u0e40\u0e02\u0e35\u0e22\u0e27\u0e21\u0e34\u0e49\u0e19)",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Zoetis",unit:"boxes",qty:1,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"D-0050b",name:"Revolution Dog/Cat <2.5kg (\u0e0a\u0e21\u0e1e\u0e39)",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"Zoetis",unit:"boxes",qty:14,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0013",name:"CLAVAMOX 125mg",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Zoetis",unit:"bottle",qty:13,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0170",name:"Apoquel 3.6mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Zoetis",unit:"bottle",qty:2,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0169",name:"Apoquel 5.4mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Zoetis",unit:"bottle",qty:6,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0168",name:"Apoquel 16mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Zoetis",unit:"bottle",qty:5,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0173",name:"Vibramycin",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Zoetis",unit:"boxes",qty:6,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"E-0151",name:"AlphaTrak3 (\u0e40\u0e02\u0e47\u0e21)",sub:"\u0e2d\u0e37\u0e48\u0e19\u0e46",company:"Zoetis",unit:"boxes",qty:4,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"E-0147",name:"AlphaTrak3 (test strips)",sub:"\u0e2d\u0e37\u0e48\u0e19\u0e46",company:"Zoetis",unit:"boxes",qty:3,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0026",name:"Prevacid FDT 15mg (Lansoprazole)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Takeda",unit:"boxes",qty:15,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0280b",name:"Zonegran 100mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Eisai",unit:"boxes",qty:8,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0353",name:"Zamir 15 (mirtazapine 15mg)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Unison",unit:"boxes",qty:2,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0396",name:"Alzer 30ml",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"Unison",unit:"bottle",qty:60,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0448",name:"Asbrip 30ml",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"GP Trading",unit:"bottle",qty:65,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"\u0e44\u0e21\u0e48\u0e21\u0e35\u0e42\u0e04\u0e49\u0e14-2",name:"Renalof 150mg",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"GP Trading",unit:"bottle",qty:20,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0153",name:"Veraflox 60mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"tablets",qty:8,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0145",name:"Fortekor Benazepril 2.5mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"boxes",qty:20,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0017",name:"Fortekor Benazepril 5mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"boxes",qty:25,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0047",name:"Atopica 10mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"boxes",qty:20,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0049",name:"Atopica 25mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"boxes",qty:28,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0050",name:"Atopica 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"boxes",qty:26,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0111",name:"Drontal Cat",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"boxes",qty:2,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0144",name:"Drontal Plus",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"boxes",qty:4,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0059",name:"Baytril 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"boxes",qty:2,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0058",name:"Baytril 150mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Elanco",unit:"boxes",qty:2,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0182",name:"Transamin",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"T.O.Chemicals",unit:"boxes",qty:1,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0211",name:"Ucholine 10mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"T.O.Chemicals",unit:"boxes",qty:1,owner:"OIL",status:"expired",sheet:"Medicine",expiry:""},
+{id:"M-0210",name:"Dramamine 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"T.O.Chemicals",unit:"boxes",qty:1,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0275",name:"Tramadol",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"L.B.S",unit:"boxes",qty:15,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0213",name:"Cerenia 160mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"boxes",qty:4,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0007",name:"Cerenia 60mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"boxes",qty:22,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0377",name:"Cerenia 24mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"boxes",qty:5,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0430",name:"Cerenia 16mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"boxes",qty:0,owner:"OIL",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0344b",name:"Furosemide Oral Syrup 60ml",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:3,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0335",name:"Cyclophosphamide 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"boxes",qty:2,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0045b",name:"Moxifloxacin 0.5% \u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:10,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0046",name:"Serum \u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:3,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0082",name:"Liquid paraffin",sub:"\u0e22\u0e32\u0e19\u0e49\u0e33",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:2,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0475",name:"Dose me 10g",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"",qty:0,owner:"OIL",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0417",name:"Molnupiravir 200mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:1,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0429",name:"Kalimate Sachet 5g",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"boxes",qty:2,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"E-0023",name:"\u0e01\u0e23\u0e30\u0e1a\u0e2d\u0e01\u0e14\u0e21\u0e22\u0e32",sub:"\u0e2d\u0e37\u0e48\u0e19\u0e46",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"\u0e2d\u0e31\u0e19",qty:3,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"D-0076",name:"Hirudoid 40g",sub:"\u0e22\u0e32\u0e43\u0e0a\u0e49\u0e20\u0e32\u0e22\u0e19\u0e2d\u0e01",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"tube",qty:5,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0257",name:"CBD (Anxiolytics)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:5,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0054",name:"Diphenhydramine 50mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:1,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0413",name:"Antivir 100mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:1,owner:"OIL",status:"low",sheet:"Medicine",expiry:""},
+{id:"M-0422",name:"Lomustine",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:1,owner:"OIL",status:"expired",sheet:"Medicine",expiry:""},
+{id:"M-0494",name:"Tacrolimus 0.03% eye drop",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:20,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0030",name:"2% Isopto Carpine",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:2,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0331",name:"Laxatone \u0e40\u0e08\u0e25\u0e01\u0e49\u0e2d\u0e19\u0e02\u0e19",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"tube",qty:5,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0488",name:"Ser-goline",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"boxes",qty:8,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0133",name:"Zoprim (sulfamethoxazole trimethoprim 480mg)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"bottle",qty:1,owner:"OIL",status:"expired",sheet:"Medicine",expiry:""},
+{id:"M-0085",name:"Ultra carbon 260mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e38\u0e01",qty:1,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0050",name:"Bio Exosome",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"\u0e44\u0e21\u0e48\u0e21\u0e35",unit:"\u0e02\u0e27\u0e14",qty:3,owner:"OIL",status:"ok",sheet:"Medicine",expiry:""},
+{id:"\u0e44\u0e21\u0e48\u0e21\u0e35\u0e42\u0e04\u0e49\u0e14-3",name:"Denamarin Large Dog SAMe 425mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:12,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0188",name:"Denamarin Soft Chew SAMe 225mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:25,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0491",name:"Denamarin Medium Dog SAMe 225mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:15,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0490",name:"Denamarin Cat & Small Dog SAMe 90mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:20,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0340",name:"Solliquin small-med dog",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"pouch",qty:19,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0376",name:"Turkey Tail mushroom powder",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"pouch",qty:10,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0308",name:"Pill Pockets tablet size",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"pouch",qty:0,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0496",name:"Pill Pockets Chicken Flavor capsule",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"pouch",qty:14,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0381",name:"Proviable-DC Probiotic",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"boxes",qty:7,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0355",name:"V.E.T. Vitamin K-1 25mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"boxes",qty:10,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0267",name:"CoQ10 30mg (GogVites)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:5,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0367",name:"Vetasy fiber capsule",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:16,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0407",name:"Avmacol Sulforaphane 480mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:7,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0403",name:"Avmaquin Glucosinolate 128mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:10,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0339",name:"ThorneVet Canine Geriatric Soft chew",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"pouch",qty:12,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0322",name:"Renal Essentials Pro vet soft chew",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"pouch",qty:2,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0486",name:"Renal Essentials tab",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:8,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0487",name:"Potassium Citrate 99mg",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:6,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0046",name:"Cushex Drops-S",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:9,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"N-0171",name:"Ocu-Glo Vision supplement",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:0,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"out",sheet:"Medicine",expiry:""},
+{id:"M-0436",name:"Flexadin Advanced UC-II",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"pouch",qty:19,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"M-0506",name:"Premium Turkey Tail (\u0e41\u0e1a\u0e1a\u0e02\u0e27\u0e14)",sub:"\u0e22\u0e32\u0e01\u0e34\u0e19",company:"Nutramax",unit:"bottle",qty:24,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"T-0051",name:"Muro 128 sodium chloride hypertonicity",sub:"\u0e22\u0e32\u0e2b\u0e22\u0e2d\u0e14\u0e15\u0e32",company:"Nutramax",unit:"bottle",qty:2,owner:"\u0e2d\u0e32\u0e08\u0e32\u0e23\u0e22\u0e4c\u0e28\u0e34\u0e23\u0e32\u0e21",status:"ok",sheet:"Medicine",expiry:""},
+{id:"N-0028",name:"Gastro Low-fat 1.5kg (lot1)",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:3,owner:"AP.",status:"ok",sheet:"Diet",expiry:"02/27"},
+{id:"N-0028c",name:"Gastro Fiber 400g",sub:"Royal Canin Cat",company:"Royal Canin",unit:"ถุง",qty:0,owner:"AP.",status:"out",sheet:"Diet",expiry:""},
+{id:"N-0123",name:"Anallergenic Ultra 3kg",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:4,owner:"AP.",status:"ok",sheet:"Diet",expiry:"10/26"},
+{id:"N-0158",name:"Anallergenic SB 3kg",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:1,owner:"AP.",status:"low",sheet:"Diet",expiry:"01/27"},
+{id:"N-0157",name:"Anallergenic SB 1.5kg",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:2,owner:"AP.",status:"ok",sheet:"Diet",expiry:"10/26"},
+{id:"N-0023",name:"Cardiac 1.5kg",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:0,owner:"AP.",status:"expired",sheet:"Diet",expiry:"06/25"},
+{id:"N-0165",name:"Hepatic 1.5kg",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:7,owner:"AP.",status:"ok",sheet:"Diet",expiry:"12/26"},
+{id:"N-0145",name:"Renal 1.5kg",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:4,owner:"AP.",status:"ok",sheet:"Diet",expiry:"08/26"},
+{id:"N-0004",name:"Gastro Low-fat (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:285,owner:"AP.",status:"ok",sheet:"Diet",expiry:"05/27"},
+{id:"N-0002",name:"Cardiac (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:50,owner:"AP.",status:"ok",sheet:"Diet",expiry:"07/26"},
+{id:"N-0006",name:"Hepatic (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:28,owner:"AP.",status:"ok",sheet:"Diet",expiry:"03/27"},
+{id:"N-0017",name:"Renal (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:15,owner:"AP.",status:"ok",sheet:"Diet",expiry:"08/26"},
+{id:"N-0175",name:"Diabetic (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Royal Canin Dog",company:"Royal Canin",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:25,owner:"AP.",status:"ok",sheet:"Diet",expiry:"10/26"},
+{id:"N-0118",name:"Gastro Fibre Response 2kg",sub:"Royal Canin Cat",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:5,owner:"AP.",status:"ok",sheet:"Diet",expiry:"01/27"},
+{id:"N-0094",name:"Renal 2kg",sub:"Royal Canin Cat",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:5,owner:"AP.",status:"ok",sheet:"Diet",expiry:"06/26"},
+{id:"N-0012",name:"Hepatic 2kg",sub:"Royal Canin Cat",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:2,owner:"AP.",status:"ok",sheet:"Diet",expiry:"02/27"},
+{id:"N-0087",name:"Neutered 3.5kg",sub:"Royal Canin Cat",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:2,owner:"AP.",status:"ok",sheet:"Diet",expiry:"04/27"},
+{id:"N-0172",name:"Anallergenic 2kg",sub:"Royal Canin Cat",company:"Royal Canin",unit:"\u0e16\u0e38\u0e07",qty:1,owner:"AP.",status:"low",sheet:"Diet",expiry:"03/27"},
+{id:"N-0040",name:"Z/d Ultra 3kg",sub:"Hill's Dog",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:1,owner:"AP.",status:"low",sheet:"Diet",expiry:"04/27"},
+{id:"N-0181",name:"Z/d SB 3kg",sub:"Hill's Dog",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:2,owner:"AP.",status:"ok",sheet:"Diet",expiry:"06/27"},
+{id:"N-0055",name:"Z/d SB 1.5kg",sub:"Hill's Dog",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:8,owner:"AP.",status:"ok",sheet:"Diet",expiry:"09/26"},
+{id:"N-0034",name:"R/d 3kg",sub:"Hill's Dog",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:2,owner:"AP.",status:"ok",sheet:"Diet",expiry:"11/26"},
+{id:"N-0033",name:"R/d 1.5kg",sub:"Hill's Dog",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:4,owner:"AP.",status:"ok",sheet:"Diet",expiry:"05/27"},
+{id:"N-0059",name:"C/d 1.5kg",sub:"Hill's Dog",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:3,owner:"AP.",status:"ok",sheet:"Diet",expiry:"05/27"},
+{id:"N-0054",name:"Z/d (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Hill's Dog",company:"Hill's",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:110,owner:"AP.",status:"ok",sheet:"Diet",expiry:"06/27"},
+{id:"N-0058",name:"C/d (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Hill's Dog",company:"Hill's",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:26,owner:"AP.",status:"ok",sheet:"Diet",expiry:"02/27"},
+{id:"N-0057",name:"Z/d 1.8kg",sub:"Hill's Cat",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:1,owner:"AP.",status:"low",sheet:"Diet",expiry:"03/27"},
+{id:"N-0052",name:"W/d 1.5kg",sub:"Hill's Cat",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:3,owner:"AP.",status:"ok",sheet:"Diet",expiry:"01/27"},
+{id:"N-0061",name:"C/d 1.5kg",sub:"Hill's Cat",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:2,owner:"AP.",status:"ok",sheet:"Diet",expiry:"09/26"},
+{id:"N-0038",name:"K/d 1.8kg",sub:"Hill's Cat",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:1,owner:"AP.",status:"low",sheet:"Diet",expiry:"09/26"},
+{id:"N-0147",name:"Metabolic 1.5kg",sub:"Hill's Cat",company:"Hill's",unit:"\u0e16\u0e38\u0e07",qty:4,owner:"AP.",status:"ok",sheet:"Diet",expiry:"03/26"},
+{id:"N-0056",name:"Z/d (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Hill's Cat",company:"Hill's",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:96,owner:"AP.",status:"ok",sheet:"Diet",expiry:"02/28"},
+{id:"N-0063",name:"i/d (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Hill's Cat",company:"Hill's",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:95,owner:"AP.",status:"ok",sheet:"Diet",expiry:"03/27"},
+{id:"N-0037",name:"K/d (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Hill's Cat",company:"Hill's",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:80,owner:"AP.",status:"ok",sheet:"Diet",expiry:"01/27"},
+{id:"N-0031",name:"a/d (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Hill's Cat",company:"Hill's",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:73,owner:"AP.",status:"ok",sheet:"Diet",expiry:"05/26"},
+{id:"N-0180",name:"W/d (\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07)",sub:"Hill's Cat",company:"Hill's",unit:"\u0e01\u0e23\u0e30\u0e1b\u0e4b\u0e2d\u0e07",qty:24,owner:"AP.",status:"ok",sheet:"Diet",expiry:"05/26"},
+{id:"N-0177",name:"NC-Neurocare 2.5kg",sub:"Purina Proplan Dog",company:"Purina",unit:"\u0e16\u0e38\u0e07",qty:4,owner:"AP.",status:"ok",sheet:"Diet",expiry:"12/26"},
+{id:"N-0178",name:"EN-Gastrointestinal 2.5kg",sub:"Purina Proplan Dog",company:"Purina",unit:"\u0e16\u0e38\u0e07",qty:6,owner:"AP.",status:"ok",sheet:"Diet",expiry:"12/26"},
+{id:"E-0168",name:"\u0e17\u0e23\u0e32\u0e22\u0e41\u0e21\u0e27",sub:"\u0e02\u0e2d\u0e07\u0e43\u0e0a\u0e49/\u0e1a\u0e23\u0e34\u0e01\u0e32\u0e23",company:"-",unit:"\u0e25\u0e31\u0e07",qty:7,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"E-0032",name:"\u0e23\u0e2d\u0e07\u0e0b\u0e31\u0e1a",sub:"\u0e02\u0e2d\u0e07\u0e43\u0e0a\u0e49/\u0e1a\u0e23\u0e34\u0e01\u0e32\u0e23",company:"-",unit:"\u0e25\u0e31\u0e07",qty:13,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"\u0e44\u0e21\u0e48\u0e21\u0e35\u0e42\u0e04\u0e49\u0e14-4",name:"\u0e19\u0e49\u0e33\u0e14\u0e37\u0e48\u0e21 Petis",sub:"\u0e02\u0e2d\u0e07\u0e43\u0e0a\u0e49/\u0e1a\u0e23\u0e34\u0e01\u0e32\u0e23",company:"-",unit:"\u0e25\u0e31\u0e07",qty:160,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"E-0106",name:"Keeen (\u0e16\u0e39\u0e1e\u0e37\u0e49\u0e19)",sub:"\u0e02\u0e2d\u0e07\u0e43\u0e0a\u0e49/\u0e1a\u0e23\u0e34\u0e01\u0e32\u0e23",company:"-",unit:"\u0e25\u0e31\u0e07",qty:8,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"E-0107",name:"Keeen (\u0e1e\u0e37\u0e49\u0e19\u0e01\u0e23\u0e07)",sub:"\u0e02\u0e2d\u0e07\u0e43\u0e0a\u0e49/\u0e1a\u0e23\u0e34\u0e01\u0e32\u0e23",company:"-",unit:"\u0e25\u0e31\u0e07",qty:10,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"\u0e44\u0e21\u0e48\u0e21\u0e35\u0e42\u0e04\u0e49\u0e14-5",name:"\u0e01\u0e32\u0e41\u0e1f",sub:"\u0e02\u0e2d\u0e07\u0e43\u0e0a\u0e49/\u0e1a\u0e23\u0e34\u0e01\u0e32\u0e23",company:"-",unit:"\u0e25\u0e31\u0e07",qty:8,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"E-0120",name:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d Size S",sub:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d",company:"-",unit:"\u0e16\u0e38\u0e07",qty:4,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"E-0121",name:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d Size M",sub:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d",company:"-",unit:"\u0e16\u0e38\u0e07",qty:3,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"E-0122",name:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d Size L",sub:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d",company:"-",unit:"\u0e16\u0e38\u0e07",qty:16,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"E-0123",name:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d Size XL",sub:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d",company:"-",unit:"\u0e16\u0e38\u0e07",qty:6,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"E-0124",name:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d Size XXL",sub:"\u0e16\u0e38\u0e07\u0e1a\u0e38\u0e0d",company:"-",unit:"\u0e16\u0e38\u0e07",qty:0,owner:"AP.",status:"out",sheet:"Diet",expiry:""},
+{id:"\u0e44\u0e21\u0e48\u0e21\u0e35\u0e42\u0e04\u0e49\u0e14-6",name:"Chlorhexidine Skin Cleanser 5L",sub:"\u0e19\u0e49\u0e33\u0e22\u0e32\u0e06\u0e48\u0e32\u0e40\u0e0a\u0e37\u0e49\u0e2d",company:"-",unit:"\u0e02\u0e27\u0e14",qty:7,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"\u0e44\u0e21\u0e48\u0e21\u0e35\u0e42\u0e04\u0e49\u0e14-7",name:"Betadine Scrub 500ml",sub:"\u0e19\u0e49\u0e33\u0e22\u0e32\u0e06\u0e48\u0e32\u0e40\u0e0a\u0e37\u0e49\u0e2d",company:"-",unit:"\u0e02\u0e27\u0e14",qty:3,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"\u0e44\u0e21\u0e48\u0e21\u0e35\u0e42\u0e04\u0e49\u0e14-8",name:"Betadine Antiseptic Solution 500ml",sub:"\u0e19\u0e49\u0e33\u0e22\u0e32\u0e06\u0e48\u0e32\u0e40\u0e0a\u0e37\u0e49\u0e2d",company:"-",unit:"\u0e02\u0e27\u0e14",qty:6,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"D-0172",name:"Vecterm 10 EW 200ml",sub:"\u0e19\u0e49\u0e33\u0e22\u0e32\u0e06\u0e48\u0e32\u0e40\u0e0a\u0e37\u0e49\u0e2d",company:"-",unit:"\u0e02\u0e27\u0e14",qty:2,owner:"AP.",status:"ok",sheet:"Diet",expiry:""},
+{id:"inj-001",name:"Adrenaline 1mg/ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:94,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"02/27"},
+{id:"inj-002",name:"Amikacin (Siamik) 125mg/ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:36,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"02/27"},
+{id:"inj-003",name:"Atropine 0.6mg/ml 1ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:100,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"01/28"},
+{id:"inj-004",name:"Alfaxan 20ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vial",qty:1,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"low",sheet:"Injectable",expiry:"10/26"},
+{id:"inj-005",name:"Buprenorphine 0.3mg/ml (Bupuq)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:3,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"02/27"},
+{id:"inj-006",name:"Butorphanol 10ml (Torphadine)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:4,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"10/27"},
+{id:"inj-007",name:"Barium sulphate",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"boxes",qty:3,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:""},
+{id:"inj-008",name:"Caninsulin 2.5ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"dose",qty:8,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"07/27"},
+{id:"inj-009",name:"Cavamox 0.6g infusion (Siam)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"Siam",unit:"vials",qty:79,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"05/27"},
+{id:"inj-010",name:"Cavamox 1.2g infusion (Siam)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"Siam",unit:"vials",qty:78,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"09/27"},
+{id:"inj-011",name:"Cef-4 1g",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:6,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"06/27"},
+{id:"inj-012",name:"Chlorpheniramine 1ml 10mg/ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:35,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"03/28"},
+{id:"inj-013",name:"Calcium gluconate inj. 10ml (GPO)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"GPO",unit:"amp",qty:50,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"12/30"},
+{id:"inj-014",name:"Cosacthen 0.25g/ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"",qty:0,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"out",sheet:"Injectable",expiry:""},
+{id:"inj-015",name:"Cytopoint 10mg inj",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Vials",qty:22,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"01/27"},
+{id:"inj-016",name:"Cytopoint 20mg inj",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Vials",qty:8,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"01/27"},
+{id:"inj-017",name:"Cytopoint 30mg inj",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Vials",qty:17,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"02/27"},
+{id:"inj-018",name:"Cytopoint 40mg inj",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Vials",qty:0,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"out",sheet:"Injectable",expiry:""},
+{id:"inj-019",name:"Darbepoetin Alfa 30ug/0.5ml NESP",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"syringe",qty:2,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"low",sheet:"Injectable",expiry:"09/27"},
+{id:"inj-020",name:"Diazepam 10mg/2ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Amp",qty:40,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"05/28"},
+{id:"inj-021",name:"Enoxaparin (Clexane) 8000IU/0.8ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Syrings",qty:10,owner:"\u0e1a\u0e38\u0e49\u0e07",status:"ok",sheet:"Injectable",expiry:"07/27"},
+{id:"inj-022",name:"Fazolin (Cefazolin) 1g",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:4,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"11/25"},
+{id:"inj-023",name:"Fercobsang",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Bottle",qty:1,owner:"\u0e04\u0e23\u0e35\u0e21",status:"low",sheet:"Injectable",expiry:"09/24"},
+{id:"inj-024",name:"Glucose 50% 100ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"bottles",qty:55,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:""},
+{id:"inj-025",name:"Heparin 5000IU/ml 5ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:3,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:""},
+{id:"inj-026",name:"Keppra 100mg/ml 5ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Vials",qty:15,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"10/26"},
+{id:"inj-027",name:"Lasix 2ml (Furosemide 10mg)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:85,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"10/26"},
+{id:"inj-028",name:"Lasix 25ml (Furosemide 10mg)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:5,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"02/27"},
+{id:"inj-029",name:"Leuco-plus 300ug",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:4,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"09/26"},
+{id:"inj-030",name:"Iohexol 300mg 50ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"bottles",qty:3,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"04/27"},
+{id:"inj-031",name:"Lidocaine 2% 50ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"bottles",qty:29,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"10/26"},
+{id:"inj-032",name:"Librela 5mg",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"boxes",qty:2,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"02/27"},
+{id:"inj-033",name:"Librela 15mg",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"boxes",qty:0,owner:"\u0e04\u0e23\u0e35\u0e21",status:"out",sheet:"Injectable",expiry:""},
+{id:"inj-034",name:"Librela 30mg",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"boxes",qty:0,owner:"\u0e04\u0e23\u0e35\u0e21",status:"out",sheet:"Injectable",expiry:""},
+{id:"inj-035",name:"Mannitol 20% 100ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Bottles",qty:38,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"01/29"},
+{id:"inj-036",name:"Meropenem 0.5g (Siam)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"Siam",unit:"vials",qty:65,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"11/26"},
+{id:"inj-037",name:"Meropenem 1g (Siam)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"Siam",unit:"vials",qty:52,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"05/27"},
+{id:"inj-038",name:"Marbocyl 100ml (Marbofloxacin 20mg)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"bottles",qty:1,owner:"\u0e04\u0e23\u0e35\u0e21",status:"low",sheet:"Injectable",expiry:"10/25"},
+{id:"inj-039",name:"Metronidazole 5mg/100ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"bottles",qty:38,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"09/26"},
+{id:"inj-040",name:"Nausil (Metoclopramide) 10mg/2ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:47,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"05/27"},
+{id:"inj-041",name:"Omeprazole 40mg",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:69,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"06/27"},
+{id:"inj-042",name:"Onsia Ondansetron 2mg/ml 4ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:315,owner:"\u0e04\u0e23\u0e35\u0e21",status:"ok",sheet:"Injectable",expiry:"01/28"},
+{id:"inj-043",name:"Prevomax 10mg/ml (Maropitant) 20ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:4,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"09/27"},
+{id:"inj-044",name:"Piptam 4.5g inj. (Siam)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"Siam",unit:"Vial",qty:13,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"11/27"},
+{id:"inj-045",name:"Potassium chloride KCL 10ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:111,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"05/27"},
+{id:"inj-046",name:"Praze Lansoprazole 5mg/ml IV",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:14,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"07/27"},
+{id:"inj-047",name:"Prednisolone inj.",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:35,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"02/29"},
+{id:"inj-048",name:"Propofol-Lipuro",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:41,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"05/27"},
+{id:"inj-049",name:"Phytomenadione inj. 10mg (Vit K)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:26,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"01/27"},
+{id:"inj-050",name:"Purvex RCCP",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"dose",qty:47,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"09/26"},
+{id:"inj-051",name:"Rabies multivac 10ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Vials",qty:11,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"03/28"},
+{id:"inj-052",name:"Synacthen 250mcg/ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Amp",qty:8,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:""},
+{id:"inj-053",name:"Sianem (Imipenem) 500mg",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"Siam",unit:"vials",qty:1,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"low",sheet:"Injectable",expiry:"02/26"},
+{id:"inj-054",name:"Sodium bicarbonate 10ml inj.",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Amp",qty:49,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"11/27"},
+{id:"inj-055",name:"Somazina Citiline 1000mg Lot1",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:7,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"11/26"},
+{id:"inj-056",name:"Somazina Citiline 1000mg Lot2",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:9,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"11/25"},
+{id:"inj-057",name:"rDAPP Dog (Recombitek)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Dose",qty:20,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"11/26"},
+{id:"inj-058",name:"Tolfedine 4% inj. 10ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:3,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"04/25"},
+{id:"inj-059",name:"Tolfedine 4% inj. 100ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"bottle",qty:1,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"low",sheet:"Injectable",expiry:"02/27"},
+{id:"inj-060",name:"Tramadol HCL 100mg/2ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Amp",qty:254,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"06/29"},
+{id:"inj-061",name:"Tranexamic acid (Gemotran 50mg/ml)",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"amp",qty:105,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"03/27"},
+{id:"inj-062",name:"Vetmedin 0.75mg/ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Vials",qty:2,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"02/28"},
+{id:"inj-063",name:"Vincristine 2mg/ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:15,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"05/27"},
+{id:"inj-064",name:"Virbagen-omega 1ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vial",qty:0,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"out",sheet:"Injectable",expiry:""},
+{id:"inj-065",name:"Zoletil (100) 5ml",sub:"\u0e22\u0e32\u0e09\u0e35\u0e14\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"vials",qty:7,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"02/27"},
+{id:"ctrl-001",name:"Fentanyl-hameln 100mcg/ml 2ml Lot.1",sub:"\u0e22\u0e32\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21",company:"-",unit:"amp",qty:10,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"09/25"},
+{id:"ctrl-002",name:"Fentanyl-hameln 100mcg/ml 2ml Lot.2",sub:"\u0e22\u0e32\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21",company:"-",unit:"amp",qty:8,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"07/27"},
+{id:"ctrl-003",name:"Fentanyl-hameln 50mcg/ml 10ml",sub:"\u0e22\u0e32\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21",company:"-",unit:"amp",qty:5,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"02/28"},
+{id:"ctrl-004",name:"Morphine sulphate 10mg/ml 1ml",sub:"\u0e22\u0e32\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21",company:"-",unit:"amp",qty:30,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"12/27"},
+{id:"ctrl-005",name:"Pethidine hydrochloride inj.",sub:"\u0e22\u0e32\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21",company:"-",unit:"amp",qty:10,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"07/27"},
+{id:"ctrl-006",name:"Ketamine-Hameln 50mg/ml 10ml",sub:"\u0e22\u0e32\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21",company:"-",unit:"Vial",qty:5,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:""},
+{id:"ctrl-007",name:"Fentanyl patch sandoz 50mcg/hr",sub:"\u0e22\u0e32\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21",company:"-",unit:"patches",qty:14,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"06/27"},
+{id:"ctrl-008",name:"Fentanyl patch sandoz 25mcg/hr",sub:"\u0e22\u0e32\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21",company:"-",unit:"patches",qty:15,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"06/27"},
+{id:"ctrl-009",name:"Etomidate 20mg/10ml (Hypnomidate)",sub:"\u0e22\u0e32\u0e04\u0e27\u0e1a\u0e04\u0e38\u0e21",company:"-",unit:"Amp",qty:10,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"ok",sheet:"Injectable",expiry:"07/27"},
+{id:"chemo-001",name:"Mitoxantrone inj. 10ml",sub:"\u0e22\u0e32\u0e40\u0e04\u0e21\u0e35",company:"-",unit:"Vial",qty:1,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"low",sheet:"Injectable",expiry:"11/26"},
+{id:"chemo-002",name:"Doxorubicin hydrochloride 50mg",sub:"\u0e22\u0e32\u0e40\u0e04\u0e21\u0e35",company:"-",unit:"Vial",qty:1,owner:"\u0e40\u0e01\u0e23\u0e1f",status:"low",sheet:"Injectable",expiry:"02/27"},
+{id:"sup-001",name:"Syringe Insulin 1ml U-100",sub:"Syringe",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:12,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-002",name:"Syringe 1ml tuberculin",sub:"Syringe",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:14,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-003",name:"Syringe 3ml",sub:"Syringe",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:14,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-004",name:"Syringe 5ml",sub:"Syringe",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:12,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-005",name:"Syringe 10ml",sub:"Syringe",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:12,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-006",name:"Syringe 20ml",sub:"Syringe",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:11,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-007",name:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b M \u0e44\u0e21\u0e48\u0e21\u0e35\u0e41\u0e1b\u0e49\u0e07",sub:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:17,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-008",name:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b M",sub:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:10,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-009",name:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b S \u0e44\u0e21\u0e48\u0e21\u0e35\u0e41\u0e1b\u0e49\u0e07",sub:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:8,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-010",name:"IV Set \u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d",sub:"IV Set",company:"-",unit:"\u0e25\u0e31\u0e07",qty:4,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-011",name:"IV Set \u0e43\u0e2b\u0e49\u0e40\u0e25\u0e37\u0e2d\u0e14",sub:"IV Set",company:"-",unit:"",qty:0,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-012",name:"\u0e42\u0e04\u0e40\u0e1a\u0e19 2\"",sub:"\u0e42\u0e04\u0e40\u0e1a\u0e19",company:"-",unit:"\u0e21\u0e49\u0e27\u0e19",qty:112,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-013",name:"\u0e42\u0e04\u0e40\u0e1a\u0e19 3\"",sub:"\u0e42\u0e04\u0e40\u0e1a\u0e19",company:"-",unit:"\u0e21\u0e49\u0e27\u0e19",qty:60,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-014",name:"\u0e40\u0e02\u0e47\u0e21\u0e0a\u0e21\u0e1e\u0e39 18\" (\u0e22\u0e32\u0e271\")",sub:"\u0e40\u0e02\u0e47\u0e21 NIPPRO",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:21,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-015",name:"\u0e40\u0e02\u0e47\u0e21\u0e1f\u0e49\u0e32 23\" (\u0e22\u0e32\u0e271\")",sub:"\u0e40\u0e02\u0e47\u0e21 NIPPRO",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:22,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-016",name:"\u0e40\u0e02\u0e47\u0e21\u0e40\u0e17\u0e32 22\" (\u0e22\u0e32\u0e27 1\")",sub:"\u0e40\u0e02\u0e47\u0e21 NIPPRO",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:16,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-017",name:"\u0e40\u0e02\u0e47\u0e21\u0e19\u0e49\u0e33\u0e15\u0e32\u0e25 26\" (\u0e22\u0e32\u0e271\") \u0e40\u0e08\u0e32\u0e30\u0e09\u0e35\u0e48",sub:"\u0e40\u0e02\u0e47\u0e21 NIPPRO",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:0,owner:"ICE",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-018",name:"\u0e40\u0e02\u0e47\u0e21\u0e19\u0e49\u0e33\u0e15\u0e32\u0e25 26\" (\u0e22\u0e32\u0e27 1/2\")",sub:"\u0e40\u0e02\u0e47\u0e21 NIPPRO",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:21,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-019",name:"\u0e40\u0e02\u0e47\u0e21\u0e14\u0e33 24\" (\u0e22\u0e32\u0e27 1\")",sub:"\u0e40\u0e02\u0e47\u0e21 NIPPRO",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:0,owner:"ICE",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-020",name:"\u0e40\u0e02\u0e47\u0e21\u0e0a\u0e21\u0e1e\u0e39 18\" (\u0e22\u0e32\u0e271/2\")",sub:"\u0e40\u0e02\u0e47\u0e21 NIPPRO",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:0,owner:"ICE",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-021",name:"Acetar 500ml",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d Acetar",company:"-",unit:"\u0e25\u0e31\u0e07",qty:16,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-022",name:"Acetar 1,000ml",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d Acetar",company:"-",unit:"\u0e25\u0e31\u0e07",qty:2,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-023",name:"Acetar 1,000ml \u0e41\u0e1a\u0e1a\u0e02\u0e27\u0e14",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d Acetar",company:"-",unit:"",qty:0,owner:"OAT",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-024",name:"NSS 100ml (\u0e2a\u0e35\u0e2a\u0e49\u0e21)",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d NSS",company:"-",unit:"\u0e25\u0e31\u0e07",qty:2,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-025",name:"NSS 500ml (\u0e2a\u0e35\u0e2a\u0e49\u0e21)",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d NSS",company:"-",unit:"\u0e25\u0e31\u0e07",qty:3,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-026",name:"Sterile water 5ml",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d NSS",company:"-",unit:"\u0e02\u0e27\u0e14",qty:200,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-027",name:"NSS 5mL (50\u0e02\u0e27\u0e14/\u0e01\u0e25\u0e48\u0e2d\u0e07)",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d NSS",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:101,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-028",name:"NSS 5mL (100\u0e02\u0e27\u0e14/\u0e01\u0e25\u0e48\u0e2d\u0e07)",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d NSS",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:16,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-029",name:"D-5-1/2 S 50ml",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d D-5-1/2 S",company:"-",unit:"\u0e02\u0e27\u0e14",qty:24,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-030",name:"D-5-1/2 S 500ml",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d D-5-1/2 S",company:"-",unit:"\u0e16\u0e38\u0e07",qty:14,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-031",name:"D-5-1/2 S 1,000ml",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d D-5-1/2 S",company:"-",unit:"\u0e02\u0e27\u0e14",qty:13,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-032",name:"D5W 100ml",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d D5W",company:"-",unit:"\u0e02\u0e27\u0e14",qty:40,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-033",name:"D5W 1,000ml",sub:"\u0e19\u0e49\u0e33\u0e40\u0e01\u0e25\u0e37\u0e2d D5W",company:"-",unit:"",qty:0,owner:"OAT",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-034",name:"IV CAT \u0e0a\u0e21\u0e1e\u0e39 18\" (\u0e22\u0e32\u0e27 1 x 1/4\")",sub:"IV CAT",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:3,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-035",name:"IV CAT \u0e1f\u0e49\u0e32 22\" (\u0e22\u0e32\u0e27 1\")",sub:"IV CAT",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:16,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-036",name:"IV CAT \u0e40\u0e2b\u0e25\u0e37\u0e2d\u0e07 24\" (\u0e22\u0e32\u0e27 3/4\")",sub:"IV CAT",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"OAT",status:"low",sheet:"Medical Supplies",expiry:""},
+{id:"sup-037",name:"IV CAT \u0e40\u0e2b\u0e25\u0e37\u0e2d\u0e07 24\" (\u0e22\u0e32\u0e27 1\")",sub:"IV CAT",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:0,owner:"OAT",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-038",name:"Extension Tube 18\"",sub:"Extension Tube",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"OAT",status:"low",sheet:"Medical Supplies",expiry:""},
+{id:"sup-039",name:"Extension Tube 42\"",sub:"Extension Tube",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:7,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-040",name:"Extension Tube 36\"",sub:"Extension Tube",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"OAT",status:"low",sheet:"Medical Supplies",expiry:""},
+{id:"sup-041",name:"\u0e40\u0e17\u0e1b\u0e43\u0e2a",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e21\u0e49\u0e27\u0e19",qty:23,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-042",name:"\u0e40\u0e17\u0e1b\u0e40\u0e2b\u0e19\u0e35\u0e22\u0e27",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e23\u0e30\u0e1a\u0e2d\u0e01",qty:3,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-043",name:"\u0e2a\u0e33\u0e25\u0e35\u0e01\u0e49\u0e2d\u0e19",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e16\u0e38\u0e07",qty:23,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-044",name:"\u0e2a\u0e33\u0e25\u0e35\u0e21\u0e49\u0e27\u0e19",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e16\u0e38\u0e07",qty:13,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-045",name:"\u0e1f\u0e34\u0e01\u0e0b\u0e39\u0e21\u0e39\u0e48",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:14,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-046",name:"\u0e2b\u0e21\u0e27\u0e01\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e2b\u0e48\u0e2d",qty:3,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-047",name:"Syringe Ball",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:120,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-048",name:"3-way",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:2,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-049",name:"\u0e2a\u0e33\u0e25\u0e35\u0e23\u0e2d\u0e07\u0e40\u0e1d\u0e37\u0e2d\u0e01",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e21\u0e49\u0e27\u0e19",qty:24,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-050",name:"\u0e1c\u0e49\u0e32\u0e22\u0e37\u0e14 confrom 2\"",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e21\u0e49\u0e27\u0e19",qty:96,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-051",name:"\u0e1c\u0e49\u0e32\u0e01\u0e47\u0e2d\u0e15 3x3 (5\u0e0b\u0e2d\u0e07/\u0e01\u0e25\u0e48\u0e2d\u0e07)",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:17,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-052",name:"\u0e1c\u0e49\u0e32\u0e2d\u0e19\u0e32\u0e21\u0e31\u0e22",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e2b\u0e48\u0e2d",qty:72,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-053",name:"\u0e40\u0e1d\u0e37\u0e2d\u0e01\u0e41\u0e02\u0e47\u0e07",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e2d\u0e31\u0e19",qty:2,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-054",name:"\u0e21\u0e34\u0e19\u0e34\u0e21\u0e31\u0e21",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:20,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-055",name:"\u0e1c\u0e49\u0e32\u0e22\u0e37\u0e14\u0e2a\u0e35\u0e19\u0e49\u0e33\u0e15\u0e32\u0e25",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"",qty:0,owner:"OAT",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-056",name:"\u0e41\u0e2d\u0e25\u0e01\u0e2d\u0e2e\u0e2d\u0e25\u0e4c 16\u0e02\u0e27\u0e14/\u0e25\u0e31\u0e07",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e25\u0e31\u0e07",qty:11,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-057",name:"\u0e01\u0e25\u0e48\u0e2d\u0e07\u0e41\u0e14\u0e07",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"",qty:999,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-058",name:"Cotton 6cm",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:2,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-059",name:"Cotton 15cm",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:2,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-060",name:"\u0e40\u0e0a\u0e37\u0e2d\u0e01",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e21\u0e49\u0e27\u0e19",qty:0,owner:"OAT",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-061",name:"\u0e19\u0e49\u0e33\u0e22\u0e32\u0e25\u0e49\u0e32\u0e07\u0e15\u0e32 (66\u0e02\u0e27\u0e14/\u0e25\u0e31\u0e07)",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e25\u0e31\u0e07",qty:6,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-062",name:"\u0e2b\u0e19\u0e49\u0e32\u0e01\u0e32\u0e01\u0e2d\u0e19\u0e32\u0e21\u0e31\u0e22\u0e2a\u0e35\u0e40\u0e02\u0e35\u0e22\u0e27",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:39,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-063",name:"\u0e16\u0e38\u0e07\u0e40\u0e01\u0e47\u0e1a\u0e28\u0e1e 80x120cm (XL)",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:6,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-064",name:"\u0e16\u0e38\u0e07\u0e40\u0e01\u0e47\u0e1a\u0e28\u0e1e 60x100cm (L)",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:10,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-065",name:"\u0e16\u0e38\u0e07\u0e40\u0e01\u0e47\u0e1a\u0e28\u0e1e 45x75cm (M)",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:3,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-066",name:"\u0e16\u0e38\u0e07\u0e40\u0e01\u0e47\u0e1a\u0e28\u0e1e 35x45cm (S)",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:3,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-067",name:"\u0e17\u0e34\u0e0a\u0e0a\u0e39\u0e48\u0e2b\u0e48\u0e2d\u0e40\u0e25\u0e47\u0e01\u0e43\u0e0a\u0e49\u0e17\u0e33\u0e41\u0e25\u0e1b",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e2b\u0e48\u0e2d",qty:30,owner:"OAT",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-068",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01 7.5cm",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:50,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-069",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01 10cm",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:19,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-070",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01 12.5cm",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:29,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-071",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01 15cm",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:15,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-072",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01 20cm",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:37,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-073",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01 25cm",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:28,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-074",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01 30cm",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:16,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-075",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01 7.5cm \u0e2a\u0e35\u0e40\u0e02\u0e35\u0e22\u0e27",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e1e\u0e25\u0e32\u0e2a\u0e15\u0e34\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:10,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-076",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01 10cm (\u0e2a\u0e35\u0e21\u0e48\u0e27\u0e07)",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:0,owner:"ICE",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-077",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01 12.5cm (\u0e2a\u0e35\u0e2a\u0e49\u0e21)",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:18,owner:"ICE",status:"ok",sheet:"Medical Supplies",expiry:""},
+{id:"sup-078",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01 \u0e40\u0e1a\u0e2d\u0e23\u0e4c1",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:0,owner:"ICE",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-079",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01 \u0e40\u0e1a\u0e2d\u0e23\u0e4c2+",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:0,owner:"ICE",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-080",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01 \u0e40\u0e1a\u0e2d\u0e23\u0e4c2",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:0,owner:"ICE",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-081",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01 \u0e40\u0e1a\u0e2d\u0e23\u0e4c3",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:0,owner:"ICE",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sup-082",name:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01 \u0e40\u0e1a\u0e2d\u0e23\u0e4c4",sub:"\u0e04\u0e2d\u0e25\u0e48\u0e32\u0e15\u0e35\u0e19\u0e15\u0e38\u0e4a\u0e01\u0e41\u0e01",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:0,owner:"ICE",status:"out",sheet:"Medical Supplies",expiry:""},
+{id:"sur-001",name:"Endotracheal tube No. 2.5",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:5,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-002",name:"Endotracheal tube No. 3",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:30,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-003",name:"Endotracheal tube No. 3.5",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:67,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-004",name:"Endotracheal tube No. 4",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:54,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-005",name:"Endotracheal tube No. 4.5",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:10,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-006",name:"Endotracheal tube No. 5",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:39,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-007",name:"Endotracheal tube No. 5.5",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:31,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-008",name:"Endotracheal tube No. 6",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:9,owner:"Game",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-009",name:"Endotracheal tube No. 6.5",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:25,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-010",name:"Endotracheal tube No. 7",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:13,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-011",name:"Endotracheal tube No. 7.5",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:5,owner:"Game",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-012",name:"Endotracheal tube No. 8",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:5,owner:"Game",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-013",name:"Endotracheal tube No. 8.5",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:24,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-014",name:"Endotracheal tube No. 9",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:5,owner:"Game",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-015",name:"Endotracheal tube No. 9.5",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:4,owner:"Game",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-016",name:"Endotracheal tube No. 10",sub:"Endotracheal tube",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:7,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-017",name:"Stainless Steel Blade (\u0e43\u0e1a\u0e21\u0e35\u0e14\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14)",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"",qty:999,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-018",name:"Cutting edge (\u0e40\u0e02\u0e47\u0e21)",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"",qty:999,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-019",name:"Polyglycolic Acid 3/0 75cm [KATSAN]",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:9,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-020",name:"Polyglactin 910 2/0 75cm",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:1,owner:"Game",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-021",name:"Polyglactin 910 3/0 75cm",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:9,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-022",name:"Polyglactin 2/0 90cm [Novosyn]",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"Game",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-023",name:"Polyglactin 3/0 90cm [Novosyn]",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"Game",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-024",name:"Polydioxanone 2-0 (PDS)",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:2,owner:"Game",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-025",name:"Polymide 2/0 (Dafilon)",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:8,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-026",name:"Nylon 3/0",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:10,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-027",name:"Monosyn 3/0",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:3,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-028",name:"Lyostypt",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:3,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-029",name:"\u0e2b\u0e25\u0e2d\u0e14\u0e40\u0e1e\u0e32\u0e30\u0e40\u0e0a\u0e37\u0e49\u0e2d exp.2027",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e2b\u0e25\u0e2d\u0e14",qty:14,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-030",name:"\u0e02\u0e27\u0e14\u0e40\u0e01\u0e47\u0e1a\u0e15\u0e31\u0e27\u0e2d\u0e22\u0e48\u0e32\u0e07",sub:"\u0e27\u0e31\u0e2a\u0e14\u0e38\u0e40\u0e22\u0e47\u0e1a\u0e41\u0e1c\u0e25",company:"-",unit:"\u0e02\u0e27\u0e14",qty:17,owner:"Game",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-031",name:"Urinary catheter cat 1.0x130mm 3Fr",sub:"Urinary catheter",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:21,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-032",name:"Urinary catheter cat 1.3x130mm 4Fr",sub:"Urinary catheter",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:39,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-033",name:"Urinary catheter Foley 6Fr x21\" (\u0e1c\u0e39\u0e49)",sub:"Urinary catheter",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:5,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-034",name:"Urinary catheter Foley 8Fr x21\" (\u0e1c\u0e39\u0e49)",sub:"Urinary catheter",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:4,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-035",name:"Urinary catheter Foley 10Fr x21\" (\u0e1c\u0e39\u0e49)",sub:"Urinary catheter",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:5,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-036",name:"Foley balloon catheter 6Fr (\u0e40\u0e21\u0e35\u0e22)",sub:"Urinary catheter",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:14,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-037",name:"Foley balloon catheter 8Fr (\u0e40\u0e21\u0e35\u0e22)",sub:"Urinary catheter",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:5,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-038",name:"Foley balloon catheter 10Fr (\u0e40\u0e21\u0e35\u0e22)",sub:"Urinary catheter",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:7,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-039",name:"Urinary Drainage Bag (\u0e16\u0e38\u0e07\u0e09\u0e35\u0e48)",sub:"Urinary catheter",company:"-",unit:"",qty:999,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-040",name:"\u0e2b\u0e21\u0e27\u0e01\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b OR",company:"-",unit:"\u0e16\u0e38\u0e07",qty:2,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-041",name:"Xylocaine jelly",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b OR",company:"-",unit:"\u0e2b\u0e25\u0e2d\u0e14",qty:21,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-042",name:"Sterility Guaranteed (Penrose)",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b OR",company:"-",unit:"\u0e0a\u0e34\u0e49\u0e19",qty:10,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-043",name:"Blood transfusion set (\u0e40\u0e0b\u0e15\u0e43\u0e2b\u0e49\u0e40\u0e25\u0e37\u0e2d\u0e14)",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b OR",company:"-",unit:"",qty:0,owner:"P'Nook",status:"out",sheet:"Surgical",expiry:""},
+{id:"sur-044",name:"Isoflurane (\u0e22\u0e32\u0e14\u0e21\u0e2a\u0e25\u0e1a)",sub:"\u0e2d\u0e38\u0e1b\u0e01\u0e23\u0e13\u0e4c\u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b OR",company:"-",unit:"\u0e02\u0e27\u0e14",qty:14,owner:"P'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-045",name:"Feeding tube 5\"",sub:"Feeding tube",company:"-",unit:"",qty:46,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-046",name:"Feeding tube 6\"",sub:"Feeding tube",company:"-",unit:"",qty:17,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-047",name:"Feeding tube 8\"",sub:"Feeding tube",company:"-",unit:"",qty:66,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-048",name:"Feeding tube 10\"",sub:"Feeding tube",company:"-",unit:"",qty:37,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-049",name:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14 Size S (6-7)",sub:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14",company:"\u0e28\u0e23\u0e35\u0e15\u0e23\u0e31\u0e07\u0e42\u0e01\u0e25\u0e1f\u0e2a\u0e4c",unit:"",qty:10,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-050",name:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14 Size M",sub:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14",company:"\u0e28\u0e23\u0e35\u0e15\u0e23\u0e31\u0e07\u0e42\u0e01\u0e25\u0e1f\u0e2a\u0e4c",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"N'Nook",status:"low",sheet:"Surgical",expiry:""},
+{id:"sur-051",name:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14 Size L",sub:"\u0e16\u0e38\u0e07\u0e21\u0e37\u0e2d\u0e1c\u0e48\u0e32\u0e15\u0e31\u0e14",company:"\u0e28\u0e23\u0e35\u0e15\u0e23\u0e31\u0e07\u0e42\u0e01\u0e25\u0e1f\u0e2a\u0e4c",unit:"",qty:22,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-052",name:"Berodual",sub:"\u0e22\u0e32\u0e14\u0e21 OR",company:"-",unit:"",qty:65,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-053",name:"Pulmicort",sub:"\u0e22\u0e32\u0e14\u0e21 OR",company:"-",unit:"",qty:60,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-054",name:"Fluimucil",sub:"\u0e22\u0e32\u0e14\u0e21 OR",company:"-",unit:"",qty:500,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-055",name:"Adrenaline Conc. (\u0e40\u0e15\u0e23\u0e35\u0e22\u0e21\u0e44\u0e27\u0e49)",sub:"\u0e22\u0e32\u0e09\u0e38\u0e01\u0e40\u0e09\u0e34\u0e19 OR",company:"-",unit:"",qty:0,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-056",name:"Adrenaline dilution (\u0e40\u0e15\u0e23\u0e35\u0e22\u0e21\u0e44\u0e27\u0e49)",sub:"\u0e22\u0e32\u0e09\u0e38\u0e01\u0e40\u0e09\u0e34\u0e19 OR",company:"-",unit:"",qty:0,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-057",name:"Atropine Conc. (\u0e40\u0e15\u0e23\u0e35\u0e22\u0e21\u0e44\u0e27\u0e49)",sub:"\u0e22\u0e32\u0e09\u0e38\u0e01\u0e40\u0e09\u0e34\u0e19 OR",company:"-",unit:"",qty:0,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"sur-058",name:"Atropine dilution (\u0e40\u0e15\u0e23\u0e35\u0e22\u0e21\u0e44\u0e27\u0e49)",sub:"\u0e22\u0e32\u0e09\u0e38\u0e01\u0e40\u0e09\u0e34\u0e19 OR",company:"-",unit:"",qty:0,owner:"N'Nook",status:"ok",sheet:"Surgical",expiry:""},
+{id:"lab-001",name:"cCortisol",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:5,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-002",name:"CPL",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:4,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-003",name:"CRP",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:5,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-004",name:"CAV Ab",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:0,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"out",sheet:"Lab",expiry:""},
+{id:"lab-005",name:"CPV Ab",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"low",sheet:"Lab",expiry:""},
+{id:"lab-006",name:"CDV Ab",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"low",sheet:"Lab",expiry:""},
+{id:"lab-007",name:"CDV Ag",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:3,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"expired",sheet:"Lab",expiry:""},
+{id:"lab-008",name:"CPV/CCV ag",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"test",qty:4,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"expired",sheet:"Lab",expiry:""},
+{id:"lab-009",name:"FPL",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:7,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-010",name:"SAA",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:5,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-011",name:"FHV Ab",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"low",sheet:"Lab",expiry:""},
+{id:"lab-012",name:"FCV Ab",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:2,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-013",name:"FPV Ab",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:1,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"low",sheet:"Lab",expiry:""},
+{id:"lab-014",name:"CPV/CCV/Giardia Ag",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:4,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-015",name:"Caniv-4",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:13,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-016",name:"Felicheck-3",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:11,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-017",name:"Fail D-3",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:10,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-018",name:"Feline NT-pro BNP",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"test",qty:4,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-019",name:"Canine NT-pro BNP",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:4,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-020",name:"Canine TnI",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"test",qty:4,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-021",name:"cTSH",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"test",qty:5,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-022",name:"D-dimer",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Test",qty:6,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-023",name:"SDMA",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Test",qty:8,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-024",name:"VM Canine Diarrhea 8 Panel",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"test",qty:6,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-025",name:"VM Feline Diarrhea 8 Panel",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Test",qty:3,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-026",name:"VM Canine Anemia 8 Panel",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"test",qty:5,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-027",name:"VM Feline Anemia 8 Panel",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:0,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"out",sheet:"Lab",expiry:""},
+{id:"lab-028",name:"VM FIV/FeLV",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Test",qty:2,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-029",name:"VM Ehrlichia Anaplasma",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:0,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"out",sheet:"Lab",expiry:""},
+{id:"lab-030",name:"VC UPC",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Test",qty:8,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-031",name:"VC Comprehensive 17",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"Test",qty:12,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:""},
+{id:"lab-032",name:"DAT (\u0e20\u0e39\u0e21\u0e34\u0e04\u0e38\u0e49\u0e21\u0e01\u0e31\u0e19\u0e17\u0e33\u0e25\u0e32\u0e22\u0e40\u0e21\u0e47\u0e14\u0e40\u0e25\u0e37\u0e2d\u0e14\u0e41\u0e14\u0e07\u0e2b\u0e21\u0e32)",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:999,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:"2024"},
+{id:"lab-033",name:"BT (\u0e2b\u0e21\u0e39\u0e48\u0e40\u0e25\u0e37\u0e2d\u0e14\u0e2b\u0e21\u0e32)",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:999,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:"2027"},
+{id:"lab-034",name:"BT A+B (\u0e2b\u0e21\u0e39\u0e48\u0e40\u0e25\u0e37\u0e2d\u0e14\u0e41\u0e21\u0e27)",sub:"Lab \u0e17\u0e31\u0e48\u0e27\u0e44\u0e1b",company:"-",unit:"\u0e01\u0e25\u0e48\u0e2d\u0e07",qty:999,owner:"\u0e2b\u0e0d\u0e34\u0e07",status:"ok",sheet:"Lab",expiry:"2022"},
+{id:"idexx-001",name:"Chem15",sub:"IDEXX",company:"IDEXX",unit:"",qty:5,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-002",name:"Chem10",sub:"IDEXX",company:"IDEXX",unit:"",qty:2,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-003",name:"SDMA",sub:"IDEXX",company:"IDEXX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-004",name:"TRIG",sub:"IDEXX",company:"IDEXX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-005",name:"UPC",sub:"IDEXX",company:"IDEXX",unit:"",qty:10,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-006",name:"NH3",sub:"IDEXX",company:"IDEXX",unit:"",qty:0,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"out",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-007",name:"PHBR",sub:"IDEXX",company:"IDEXX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-008",name:"FRU",sub:"IDEXX",company:"IDEXX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-009",name:"LAC",sub:"IDEXX",company:"IDEXX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-010",name:"Bile Acid",sub:"IDEXX",company:"IDEXX",unit:"",qty:11,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-011",name:"Total T4",sub:"IDEXX",company:"IDEXX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-012",name:"Blood Gas",sub:"IDEXX",company:"IDEXX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-013",name:"Reagent Kit",sub:"IDEXX",company:"IDEXX",unit:"",qty:4,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-014",name:"Stain Pack",sub:"IDEXX",company:"IDEXX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-015",name:"Calibration Gas",sub:"IDEXX",company:"IDEXX",unit:"",qty:0,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"out",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-016",name:"Smart QC",sub:"IDEXX",company:"IDEXX",unit:"",qty:2,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-017",name:"Pipette Tip",sub:"IDEXX",company:"IDEXX",unit:"",qty:4,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-018",name:"Sample Cup",sub:"IDEXX",company:"IDEXX",unit:"",qty:4,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-019",name:"Lithium Heparin",sub:"IDEXX",company:"IDEXX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-020",name:"Heparin Tube",sub:"IDEXX",company:"IDEXX",unit:"",qty:999,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-021",name:"EDTA Tube",sub:"IDEXX",company:"IDEXX",unit:"",qty:999,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-022",name:"Microcentrifuge",sub:"IDEXX",company:"IDEXX",unit:"",qty:999,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-023",name:"Blue Tip",sub:"IDEXX",company:"IDEXX",unit:"",qty:999,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-024",name:"Slides",sub:"IDEXX",company:"IDEXX",unit:"",qty:999,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-025",name:"Cover Glass",sub:"IDEXX",company:"IDEXX",unit:"",qty:999,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-026",name:"DTM",sub:"IDEXX",company:"IDEXX",unit:"",qty:2,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-027",name:"Combur Test",sub:"IDEXX",company:"IDEXX",unit:"",qty:9,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-028",name:"PKD",sub:"GlinX",company:"GlinX",unit:"",qty:2,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-029",name:"HCM-3",sub:"GlinX",company:"GlinX",unit:"",qty:2,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"ok",sheet:"Lab IDEXX",expiry:""},
+{id:"idexx-030",name:"aPTT/PT",sub:"GlinX",company:"GlinX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""}
+];
+const CHECKERS=["EARN","TOEY","OIL","ICE","OAT","Game","Nook","หมวย","หญิง","บุ้ง","ครีม","เกรฟ","AP.","Mark","อาจารย์ศิราม"];
+const SHEETS=["ทั้งหมด","⚠️ แจ้งเตือน","🕐 เกิน 7 วัน","Medicine","Diet","Injectable","Medical Supplies","Surgical","Lab","Lab IDEXX"];
+// sub-categories per sheet
+const SUBS={
+  Medicine:[...new Set(DRUGS.filter(d=>d.sheet==="Medicine").map(d=>d.sub))],
+  Diet:[...new Set(DRUGS.filter(d=>d.sheet==="Diet").map(d=>d.sub))],
+  Injectable:[...new Set(DRUGS.filter(d=>d.sheet==="Injectable").map(d=>d.sub))],
+  "Medical Supplies":[...new Set(DRUGS.filter(d=>d.sheet==="Medical Supplies").map(d=>d.sub))],
+  Surgical:[...new Set(DRUGS.filter(d=>d.sheet==="Surgical").map(d=>d.sub))],
+  Lab:["Lab ทั่วไป"],
+  "Lab IDEXX":["IDEXX","GlinX"],
+};
+let fbState={},expandedId=null,activeSheet="ทั้งหมด",activeSub="",searchQ="";
+
+onValue(stockRef,snap=>{
+  fbState=snap.val()||{};
+  document.getElementById("loadingOverlay").classList.add("hidden");
+  setBanner("live","🟢 Real-time sync · ทุกคนเห็นข้อมูลเดียวกัน");
+  render();
+},()=>{
+  setBanner("error","❌ เชื่อมต่อไม่ได้");
+  document.getElementById("loadingOverlay").classList.add("hidden");
+});
+
+function setBanner(cls,text){const b=document.getElementById("syncBanner");b.className="sync-banner "+cls;document.getElementById("syncText").textContent=text;}
+function getSt(d){return fbState[d.id]?.status||d.status;}
+function getQty(d){return fbState[d.id]?.qty!==undefined?fbState[d.id].qty:d.qty;}
+function dotCls(s){return({ok:"ok",low:"low",out:"out",order:"out",expired:"expired"})[s]||"ok";}
+
+window.setSheet=id=>{activeSheet=id;activeSub="";expandedId=null;render();};
+window.setSub=s=>{activeSub=activeSub===s?"":s;expandedId=null;render();};
+
+function daysSinceCheck(id){
+  const s=fbState[id];
+  if(!s||!s.savedAt)return 9999;
+  // savedAt format: "DD/MM/YY HH:MM"
+  try{
+    const [datePart,timePart]=s.savedAt.split(" ");
+    const [dd,mm,yy]=datePart.split("/");
+    const [hh,min]=timePart.split(":");
+    const year=parseInt(yy)<100?2000+parseInt(yy):parseInt(yy);
+    const d=new Date(year,parseInt(mm)-1,parseInt(dd),parseInt(hh),parseInt(min));
+    const diffMs=Date.now()-d.getTime();
+    return diffMs/(1000*60*60*24);
+  }catch(e){return 9999;}
+}
+function filtered(){
+  return DRUGS.filter(d=>{
+    const st=getSt(d);
+    if(activeSheet==="⚠️ แจ้งเตือน")return["out","low","expired","order"].includes(st);
+    if(activeSheet==="🕐 เกิน 7 วัน")return daysSinceCheck(d.id)>7;
+    if(activeSheet!=="ทั้งหมด"&&d.sheet!==activeSheet)return false;
+    if(activeSub&&d.sub!==activeSub)return false;
+    if(searchQ){const q=searchQ.toLowerCase();return d.name.toLowerCase().includes(q)||d.id.toLowerCase().includes(q)||d.company.toLowerCase().includes(q)||d.sub.toLowerCase().includes(q);}
+    return true;
+  });
+}
+
+function render(){
+  // tabs
+  document.getElementById("tabsBar").innerHTML=SHEETS.map(s=>`<div class="tab${activeSheet===s?" active":""}" onclick="setSheet('${s.replace(/'/g,"\\'")}')">${s}</div>`).join("");
+  // subtabs
+  const subBar=document.getElementById("subtabsBar");
+  const subs=SUBS[activeSheet]||[];
+  if(subs.length>1&&activeSheet!=="ทั้งหมด"&&activeSheet!=="⚠️ แจ้งเตือน"&&activeSheet!=="🕐 เกิน 7 วัน"&&!searchQ){
+    subBar.className="subtabs show";
+    subBar.innerHTML=subs.map(s=>`<div class="subtab${activeSub===s?" active":""}" onclick="setSub('${s.replace(/'/g,"\\'")}')">${s}</div>`).join("");
+  }else{subBar.className="subtabs";}
+  const drugs=filtered();
+  const gc=localStorage.getItem("petis_checker")||"";
+  const checkerBar=`<div class="checker-bar"><span class="checker-label">ผู้เช็ค:</span><select id="gc" onchange="localStorage.setItem('petis_checker',this.value)"><option value="">-- เลือกชื่อ --</option>${CHECKERS.map(c=>`<option value="${c}"${gc===c?" selected":""}>${c}</option>`).join("")}</select></div>`;
+  if(!drugs.length){document.getElementById("mainContent").innerHTML=checkerBar+`<div class="empty">ไม่พบรายการ</div>`;updateSummary();return;}
+  let html="";
+  if(activeSheet==="⚠️ แจ้งเตือน"||activeSheet==="🕐 เกิน 7 วัน"||searchQ){html=drugs.map(cardHTML).join("");}
+  else{
+    const groups={};
+    drugs.forEach(d=>{const g=activeSub?d.company||"-":d.sub||d.company||"-";if(!groups[g])groups[g]=[];groups[g].push(d);});
+    for(const[g,list]of Object.entries(groups)){
+      html+=`<div class="section-hdr"><div class="section-title">${g}</div><div class="section-count">${list.length}</div></div>`;
+      html+=list.map(cardHTML).join("");
+    }
+  }
+  document.getElementById("mainContent").innerHTML=checkerBar+html;
+  updateSummary();
+}
+
+function cardHTML(d){
+  const st=getSt(d),qty=getQty(d),s=fbState[d.id]||{},exp=expandedId===d.id;
+  const days=daysSinceCheck(d.id);
+  const daysLabel=days===9999?"":days<1?" (วันนี้)":days<2?" (เมื่อวาน)":`(${Math.floor(days)} วันที่แล้ว)`;
+  const checkColor=days>7?"color:#f7554f":days>3?"color:#f7c948":"color:#5ba0f7";
+  const savedInfo=s.savedAt?`<div class="last-check checked" style="${checkColor}">🕐 ${s.savedAt}${s.checker?" · "+s.checker:""}${daysLabel}</div>`:`<div class="last-check never">ยังไม่เคยเช็ค</div>`;
+  const expStr=s.expiry||d.expiry||"";
+  return`<div class="card${exp?" expanded":""}" id="card-${d.id}">
+<div class="card-hdr" onclick="toggleCard('${d.id}')">
+  <div class="dot ${dotCls(st)}"></div>
+  <div class="card-info">
+    <div class="drug-name">${d.name}</div>
+    <div class="drug-meta">${d.id||"-"} · ${d.company||"-"} · ${d.sub}</div>
+    ${savedInfo}
+  </div>
+  <div class="qty-badge ${dotCls(st)}">${qty===999?"เยอะ":qty} ${d.unit}</div>
+</div>
+<div class="edit-panel">
+  <div class="form-row">
+    <div class="form-group"><label>จำนวน (${d.unit||"-"})</label><input type="number" id="qty-${d.id}" value="${qty===999?0:qty}" min="0"></div>
+    <div class="form-group"><label>สถานะ</label><select id="st-${d.id}"><option value="ok"${st==="ok"?" selected":""}>✅ ปกติ</option><option value="low"${st==="low"?" selected":""}>⚠️ ใกล้หมด</option><option value="out"${st==="out"?" selected":""}>🔴 หมด/สั่ง</option><option value="order"${st==="order"?" selected":""}>📦 รอสั่ง</option><option value="expired"${st==="expired"?" selected":""}>⛔ หมดอายุ</option></select></div>
+    <div class="form-group"><label>วันหมดอายุ</label><input type="date" id="exp-${d.id}" value="${expStr.match(/^\d{4}-\d{2}-\d{2}$/)?expStr:""}"></div>
+    <div class="form-group"><label>ผู้เช็ค</label><select id="chk-${d.id}"><option value="">-- เลือก --</option>${CHECKERS.map(c=>`<option value="${c}"${s.checker===c?" selected":""}>${c}</option>`).join("")}</select></div>
+    <div class="form-group full"><label>หมายเหตุ</label><textarea id="note-${d.id}" placeholder="หมายเหตุ...">${s.note||""}</textarea></div>
+  </div>
+  <button class="btn-save" id="btn-${d.id}" onclick="saveDrug('${d.id}')">💾 บันทึก (sync ทุกคน)</button>
+</div>
+</div>`;
+}
+
+window.toggleCard=id=>{
+  expandedId=expandedId===id?null:id;render();
+  if(expandedId){
+    const gc=localStorage.getItem("petis_checker")||"";
+    const el=document.getElementById(`chk-${id}`);
+    if(el&&gc&&!fbState[id]?.checker)el.value=gc;
+    setTimeout(()=>document.getElementById(`card-${id}`)?.scrollIntoView({behavior:"smooth",block:"nearest"}),50);
+  }
+};
+
+window.saveDrug=async id=>{
+  const btn=document.getElementById(`btn-${id}`);
+  btn.textContent="⏳ กำลัง sync...";btn.classList.add("saving");
+  const now=new Date();
+  const ts=now.toLocaleDateString("th-TH",{day:"2-digit",month:"2-digit",year:"2-digit"})+" "+now.toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"});
+  try{
+    await update(ref(db,`stock/${id}`),{
+      qty:parseInt(document.getElementById(`qty-${id}`)?.value)||0,
+      status:document.getElementById(`st-${id}`)?.value||"ok",
+      expiry:document.getElementById(`exp-${id}`)?.value||"",
+      checker:document.getElementById(`chk-${id}`)?.value||"",
+      note:document.getElementById(`note-${id}`)?.value||"",
+      savedAt:ts,
+    });
+    expandedId=null;
+  }catch(e){btn.textContent="❌ บันทึกไม่ได้";btn.classList.remove("saving");}
+};
+
+function updateSummary(){
+  let out=0,low=0,ok=0,exp=0;
+  DRUGS.forEach(d=>{const s=getSt(d);if(s==="out"||s==="order")out++;else if(s==="low")low++;else if(s==="expired")exp++;else ok++;});
+  document.getElementById("cntOut").textContent=out;
+  document.getElementById("cntLow").textContent=low;
+  document.getElementById("cntOk").textContent=ok;
+  document.getElementById("cntExp").textContent=exp;
+}
+
+document.getElementById("dateBadge").textContent=new Date().toLocaleDateString("th-TH",{day:"2-digit",month:"2-digit",year:"numeric"});
+document.getElementById("searchInput").addEventListener("input",function(){searchQ=this.value.trim();expandedId=null;render();});
+document.getElementById("tabsBar").innerHTML=SHEETS.map(s=>`<div class="tab${activeSheet===s?" active":""}" onclick="setSheet('${s.replace(/'/g,"\\'")}')">${s}</div>`).join("");
+</script>
+</body>
+</html>
