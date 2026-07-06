@@ -754,27 +754,27 @@ window.setSub=s=>{activeSub=activeSub===s?"":s;expandedId=null;render();};
 
 function daysSinceCheck(id){
   const s=fbState[id];
-  if(!s||!s.savedAt)return 9999;
-  // savedAt format: "DD/MM/YY HH:MM" — YY is Buddhist Era (พ.ศ.) 2-digit
-  // e.g. "24/04/68" = 24 Apr BE 2568 = 24 Apr CE 2025
+  if(!s||!s.savedAt)return -1; // never checked
   try{
-    const parts=s.savedAt.split(" ");
-    const [dd,mm,yy]=parts[0].split("/");
-    const [hh,min]=(parts[1]||"00:00").split(":");
-    const yInt=parseInt(yy);
-    // 2-digit BE: 50-99 → 2550-2599, 00-49 → 2600-2649
-    const beFull=yInt<100?(yInt>=50?2500+yInt:2600+yInt):yInt;
+    const parts=s.savedAt.trim().split(" ");
+    const dateParts=parts[0].split("/");
+    const timeParts=(parts[1]||"00:00").split(":");
+    if(dateParts.length<3)return -1;
+    const dd=parseInt(dateParts[0]),mm=parseInt(dateParts[1]),yy=parseInt(dateParts[2]);
+    const hh=parseInt(timeParts[0])||0,min=parseInt(timeParts[1])||0;
+    // YY is 2-digit Buddhist Era e.g. 68 = BE2568 = CE2025
+    const beFull=yy<100?(yy>=50?2500+yy:2600+yy):yy;
     const cYear=beFull-543;
-    const d=new Date(cYear,parseInt(mm)-1,parseInt(dd),parseInt(hh)||0,parseInt(min)||0);
-    if(isNaN(d.getTime()))return 9999;
+    const d=new Date(cYear,mm-1,dd,hh,min);
+    if(isNaN(d.getTime()))return -1;
     return(Date.now()-d.getTime())/(1000*60*60*24);
-  }catch(e){return 9999;}
+  }catch(e){return -1;}
 }
 function filtered(){
   return DRUGS.filter(d=>{
     const st=getSt(d);
     if(activeSheet==="⚠️ แจ้งเตือน")return["out","low","expired","order"].includes(st);
-    if(activeSheet==="🕐 เกิน 7 วัน")return daysSinceCheck(d.id)>7;
+    if(activeSheet==="🕐 เกิน 7 วัน"){const ds=daysSinceCheck(d.id);return ds>7;} // ds=-1 means never checked, ds>7 means overdue
     if(activeSheet!=="ทั้งหมด"&&d.sheet!==activeSheet)return false;
     if(activeSub&&d.sub!==activeSub)return false;
     if(searchQ){const q=searchQ.toLowerCase();return d.name.toLowerCase().includes(q)||d.id.toLowerCase().includes(q)||d.company.toLowerCase().includes(q)||d.sub.toLowerCase().includes(q);}
@@ -813,8 +813,8 @@ function render(){
 function cardHTML(d){
   const st=getSt(d),qty=getQty(d),s=fbState[d.id]||{},exp=expandedId===d.id;
   const days=daysSinceCheck(d.id);
-  const daysLabel=days===9999?"":days<1?" (วันนี้)":days<2?" (เมื่อวาน)":`(${Math.floor(days)} วันที่แล้ว)`;
-  const checkColor=days>7?"color:#f7554f":days>3?"color:#f7c948":"color:#5ba0f7";
+  const daysLabel=days<0?"":days<1?" (วันนี้)":days<2?" (เมื่อวาน)":`(${Math.floor(days)} วันที่แล้ว)`;
+  const checkColor=days<0?"color:var(--mut)":days>7?"color:#f7554f":days>3?"color:#f7c948":"color:#5ba0f7";
   const savedInfo=s.savedAt?`<div class="last-check checked" style="${checkColor}">🕐 ${s.savedAt}${s.checker?" · "+s.checker:""}${daysLabel}</div>`:`<div class="last-check never">ยังไม่เคยเช็ค</div>`;
   const expStr=s.expiry||d.expiry||"";
   return`<div class="card${exp?" expanded":""}" id="card-${d.id}">
