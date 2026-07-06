@@ -755,15 +755,19 @@ window.setSub=s=>{activeSub=activeSub===s?"":s;expandedId=null;render();};
 function daysSinceCheck(id){
   const s=fbState[id];
   if(!s||!s.savedAt)return 9999;
-  // savedAt format: "DD/MM/YY HH:MM"
+  // savedAt format: "DD/MM/YY HH:MM" — YY is Buddhist Era (พ.ศ.) 2-digit
+  // e.g. "24/04/68" = 24 Apr BE 2568 = 24 Apr CE 2025
   try{
-    const [datePart,timePart]=s.savedAt.split(" ");
-    const [dd,mm,yy]=datePart.split("/");
-    const [hh,min]=timePart.split(":");
-    const year=parseInt(yy)<100?2000+parseInt(yy):parseInt(yy);
-    const d=new Date(year,parseInt(mm)-1,parseInt(dd),parseInt(hh),parseInt(min));
-    const diffMs=Date.now()-d.getTime();
-    return diffMs/(1000*60*60*24);
+    const parts=s.savedAt.split(" ");
+    const [dd,mm,yy]=parts[0].split("/");
+    const [hh,min]=(parts[1]||"00:00").split(":");
+    const yInt=parseInt(yy);
+    // 2-digit BE: 50-99 → 2550-2599, 00-49 → 2600-2649
+    const beFull=yInt<100?(yInt>=50?2500+yInt:2600+yInt):yInt;
+    const cYear=beFull-543;
+    const d=new Date(cYear,parseInt(mm)-1,parseInt(dd),parseInt(hh)||0,parseInt(min)||0);
+    if(isNaN(d.getTime()))return 9999;
+    return(Date.now()-d.getTime())/(1000*60*60*24);
   }catch(e){return 9999;}
 }
 function filtered(){
