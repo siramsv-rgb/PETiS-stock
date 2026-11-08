@@ -739,7 +739,7 @@ const DRUGS=[
 {id:"idexx-030",name:"aPTT/PT",sub:"GlinX",company:"GlinX",unit:"",qty:1,owner:"\u0e2b\u0e21\u0e27\u0e22",status:"low",sheet:"Lab IDEXX",expiry:""}
 ];
 const CHECKERS=["EARN","TOEY","OIL","ICE","OAT","Game","Nook","หมวย","หญิง","บุ้ง","ครีม","เกรฟ","AP.","Mark","อาจารย์ศิราม"];
-const SHEETS=["ทั้งหมด","⚠️ แจ้งเตือน","🕐 เกิน 7 วัน","Medicine","Diet","Injectable","Medical Supplies","Surgical","Lab","Lab IDEXX"];
+const SHEETS=["ทั้งหมด","⚠️ แจ้งเตือน","🕐 เกิน 14 วัน","⏰ เกิน 30 วัน","Medicine","Diet","Injectable","Medical Supplies","Surgical","Lab","Lab IDEXX"];
 // sub-categories per sheet
 const SUBS={
   Medicine:[...new Set(DRUGS.filter(d=>d.sheet==="Medicine").map(d=>d.sub))],
@@ -792,7 +792,8 @@ function filtered(){
   return DRUGS.filter(d=>{
     const st=getSt(d);
     if(activeSheet==="⚠️ แจ้งเตือน")return["out","low","expired","order"].includes(st);
-    if(activeSheet==="🕐 เกิน 7 วัน"){const ds=daysSinceCheck(d.id);return ds>7;} // ds=-1 means never checked, ds>7 means overdue
+    if(activeSheet==="🕐 เกิน 14 วัน"){const ds=daysSinceCheck(d.id);return ds>14;} // ds=-1 means never checked, ds>14 means overdue
+    if(activeSheet==="⏰ เกิน 30 วัน"){const ds=daysSinceCheck(d.id);return ds>30;}
     if(activeSheet!=="ทั้งหมด"&&d.sheet!==activeSheet)return false;
     if(activeSub&&d.sub!==activeSub)return false;
     if(searchQ){const q=searchQ.toLowerCase();return d.name.toLowerCase().includes(q)||d.id.toLowerCase().includes(q)||d.company.toLowerCase().includes(q)||d.sub.toLowerCase().includes(q);}
@@ -806,7 +807,7 @@ function render(){
   // subtabs
   const subBar=document.getElementById("subtabsBar");
   const subs=SUBS[activeSheet]||[];
-  if(subs.length>1&&activeSheet!=="ทั้งหมด"&&activeSheet!=="⚠️ แจ้งเตือน"&&activeSheet!=="🕐 เกิน 7 วัน"&&!searchQ){
+  if(subs.length>1&&activeSheet!=="ทั้งหมด"&&activeSheet!=="⚠️ แจ้งเตือน"&&activeSheet!=="🕐 เกิน 14 วัน"&&activeSheet!=="⏰ เกิน 30 วัน"&&!searchQ){
     subBar.className="subtabs show";
     subBar.innerHTML=subs.map(s=>`<div class="subtab${activeSub===s?" active":""}" onclick="setSub('${s.replace(/'/g,"\\'")}')">${s}</div>`).join("");
   }else{subBar.className="subtabs";}
@@ -815,7 +816,15 @@ function render(){
   const checkerBar=`<div class="checker-bar"><span class="checker-label">ผู้เช็ค:</span><select id="gc" onchange="localStorage.setItem('petis_checker',this.value)"><option value="">-- เลือกชื่อ --</option>${CHECKERS.map(c=>`<option value="${c}"${gc===c?" selected":""}>${c}</option>`).join("")}</select></div>`;
   if(!drugs.length){document.getElementById("mainContent").innerHTML=checkerBar+`<div class="empty">ไม่พบรายการ</div>`;updateSummary();return;}
   let html="";
-  if(activeSheet==="⚠️ แจ้งเตือน"||activeSheet==="🕐 เกิน 7 วัน"||searchQ){html=drugs.map(cardHTML).join("");}
+  if(activeSheet==="⚠️ แจ้งเตือน"){
+    const grp={};
+    drugs.forEach(d=>{const g=d.company||"-";if(!grp[g])grp[g]=[];grp[g].push(d);});
+    const sorted=Object.entries(grp).sort((a,b)=>a[0].localeCompare(b[0],"th"));
+    for(const[g,list]of sorted){
+      html+=`<div class="section-hdr"><div class="section-title">${g}</div><div class="section-count">${list.length}</div></div>`;
+      html+=list.map(cardHTML).join("");
+    }
+  } else if(activeSheet==="🕐 เกิน 14 วัน"||activeSheet==="⏰ เกิน 30 วัน"||searchQ){html=drugs.map(cardHTML).join("");}
   else{
     const groups={};
     drugs.forEach(d=>{const g=activeSub?d.company||"-":d.sub||d.company||"-";if(!groups[g])groups[g]=[];groups[g].push(d);});
@@ -832,7 +841,7 @@ function cardHTML(d){
   const st=getSt(d),qty=getQty(d),s=fbState[d.id]||{},exp=expandedId===d.id;
   const days=daysSinceCheck(d.id);
   const daysLabel=days<0?"":days<1?" (วันนี้)":days<2?" (เมื่อวาน)":`(${Math.floor(days)} วันที่แล้ว)`;
-  const checkColor=days<0?"color:var(--mut)":days>7?"color:#f7554f":days>3?"color:#f7c948":"color:#5ba0f7";
+  const checkColor=days<0?"color:var(--mut)":days>14?"color:#f7554f":days>7?"color:#f7c948":"color:#5ba0f7";
   const savedInfo=s.savedAt?`<div class="last-check checked" style="${checkColor}">🕐 ${s.savedAt}${s.checker?" · "+s.checker:""}${daysLabel}</div>`:`<div class="last-check never">ยังไม่เคยเช็ค</div>`;
   const expStr=s.expiry||d.expiry||"";
   return`<div class="card${exp?" expanded":""}" id="card-${d.id}">
